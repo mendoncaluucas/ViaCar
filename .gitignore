@@ -1,0 +1,45 @@
+# Dependencias
+node_modules/
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Ambiente - NUNCA commitar o .env real
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Testes
+coverage/
+.nyc_output/
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# Docker
+docker-data/
+
+# Editores
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+
+# Sistema operacional
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Vite
+.vite/
