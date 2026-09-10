@@ -1,0 +1,170 @@
+// ViaCar - Gestao de Caronas Corporativas (Case 14 - Equipe Draft)
+//
+// Modelagem documentada em docs/modelagem-dados.md. Tres decisoes que explicam o schema:
+//
+// 1. Nao existe tabela "motorista" nem "passageiro". Papel e contextual: o mesmo
+//    funcionario dirige na ida e pega carona na volta.
+// 2. Rota e o trajeto recorrente; Carona e a viagem de um dia especifico. O case pede
+//    os dois como itens separados, e e o que permite pendurar pontos e avaliacao no N2/N3.
+// 3. vagasDisponiveis NAO e coluna. E calculado como
+//    vagasOfertadas - COUNT(reservas CONFIRMADA), senao dessincroniza no primeiro cancelamento.
+//
+// CHECK constraints e o indice unico parcial nao existem na linguagem do Prisma.
+// Eles vivem em SQL na migration - ver prisma/migrations/.../migration.sql.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Sentido {
+  IDA
+  VOLTA
+}
+
+enum StatusCarona {
+  ABERTA
+  LOTADA
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+enum StatusReserva {
+  CONFIRMADA
+  CANCELADA
+  REALIZADA
+  NAO_COMPARECEU
+}
+
+model Usuario {
+  id           String   @id @default(uuid()) @db.Uuid
+  nome         String   @db.VarChar(120)
+  email        String   @unique @db.VarChar(160)
+  senhaHash    String   @map("senha_hash") @db.VarChar(255)
+  matricula    String   @unique @db.VarChar(20)
+  telefone     String?  @db.VarChar(20)
+  bairro       String   @db.VarChar(80)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  veiculos Veiculo[]
+  rotas    Rota[]
+  reservas Reserva[]
+
+  @@index([bairro])
+  @@map("usuario")
+}
+
+model Veiculo {
+  id String @id @default(uuid()) @db.Uuid
+
+  usuarioId String @map("usuario_id") @db.Uuid
+
+  placa  String @unique @db.VarChar(8)
+  modelo String @db.VarChar(80)
+  cor    String @db.VarChar(40)
+
+  /// NAO conta o motorista: um Civic de 5 lugares tem capacidadePassageiros = 4.
+  /// E o teto da RN-01 (o motorista nao pode ofertar mais vagas que isso).
+  capacidadePassageiros Int @map("capacidade_passageiros") @db.SmallInt
+
+  ativo    Boolean  @default(true)
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  // Sem cascade de proposito: usuario e desativado (ativo = false), nunca apagado.
+  // Apagar em cascata destruiria o historico que o N2/N3 usa para pontos e avaliacao.
+  usuario Usuario  @relation(fields: [usuarioId], references: [id])
+  caronas Carona[]
+
+  @@index([usuarioId])
+  @@map("veiculo")
+}
+
+model Rota {
+  id String @id @default(uuid()) @db.Uuid
+
+  motoristaId String @map("motorista_id") @db.Uuid
+
+  apelido         String @db.VarChar(120)
+  origemEndereco  String @map("origem_endereco") @db.VarChar(200)
+  origemBairro    String @map("origem_bairro") @db.VarChar(80)
+  destinoEndereco String @map("destino_endereco") @db.VarChar(200)
+  destinoBairro   String @map("destino_bairro") @db.VarChar(80)
+
+  /// TIME do Postgres. O Prisma devolve como Date ancorado em 1970-01-01;
+  /// a API converte para "HH:mm" com os helpers de shared/utils/horario.ts.
+  horarioPartida DateTime @map("horario_partida") @db.Time(0)
+
+  sentido Sentido
+
+  /// 1 = segunda ... 7 = domingo. Rota de dia util chega como [1,2,3,4,5].
+  diasSemana Int[] @map("dias_semana") @db.SmallInt
+
+  ativa    Boolean  @default(true)
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  motorista Usuario  @relation(fields: [motoristaId], references: [id])
+  caronas   Carona[]
+
+  @@index([motoristaId])
+  @@index([origemBairro, destinoBairro, sentido])
+  @@map("rota")
+}
+
+model Carona {
+  id String @id @default(uuid()) @db.Uuid
+
+  rotaId    String @map("rota_id") @db.Uuid
+  veiculoId String @map("veiculo_id") @db.Uuid
+
+  dataPartida DateTime @map("data_partida") @db.Timestamptz(3)
+
+  /// RN-01: precisa ser <= veiculo.capacidadePassageiros.
+  /// Cruza duas tabelas, entao CHECK simples nao resolve - a validacao vive no
+  /// carona.service.ts e (opcionalmente) numa trigger. Ver DT-01 em debitos-tecnicos.md.
+  vagasOfertadas Int @map("vagas_ofertadas") @db.SmallInt
+
+  status     StatusCarona @default(ABERTA)
+  observacao String?      @db.VarChar(255)
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  rota     Rota      @relation(fields: [rotaId], references: [id])
+  veiculo  Veiculo   @relation(fields: [veiculoId], references: [id])
+  reservas Reserva[]
+
+  @@unique([rotaId, dataPartida], name: "carona_rota_data_unica")
+  @@index([dataPartida, status])
+  @@map("carona")
+}
+
+model Reserva {
+  id String @id @default(uuid()) @db.Uuid
+
+  caronaId     String @map("carona_id") @db.Uuid
+  passageiroId String @map("passageiro_id") @db.Uuid
+
+  /// REALIZADA e NAO_COMPARECEU existem para alimentar pontuacao (N2) e
+  /// avaliacao de conduta (N3). Nao remover do enum.
+  status StatusReserva @default(CONFIRMADA)
+
+  pontoEmbarque String? @map("ponto_embarque") @db.VarChar(160)
+
+  criadoEm    DateTime  @default(now()) @map("criado_em") @db.Timestamptz(3)
+  canceladoEm DateTime? @map("cancelado_em") @db.Timestamptz(3)
+
+  // Cancelar carona muda o status das reservas (RN-08), nao apaga linha.
+  carona     Carona  @relation(fields: [caronaId], references: [id])
+  passageiro Usuario @relation(fields: [passageiroId], references: [id])
+
+  @@index([caronaId])
+  @@index([passageiroId])
+  @@map("reserva")
+}

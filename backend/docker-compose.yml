@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: viacar-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: viacar
+      POSTGRES_PASSWORD: viacar
+      POSTGRES_DB: viacar
+    # 5433 no host de proposito: a 5432 costuma ja estar ocupada por outro
+    # Postgres na maquina do dev. Dentro da rede do compose continua 5432.
+    ports:
+      - "5433:5432"
+    volumes:
+      - viacar-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U viacar -d viacar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: adminer:4
+    container_name: viacar-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  viacar-postgres-data:
