@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    // Destaque de sintaxe e formatacao para prisma/schema.prisma
+    "Prisma.prisma",
+    // Cliente HTTP dentro do editor - alternativa ao Postman para testar a API
+    "humao.rest-client"
+  ]
+}
