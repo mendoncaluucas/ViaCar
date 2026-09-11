@@ -10,7 +10,7 @@ export function parametroObrigatorio(req: Request, nome: string): string {
   const valor = req.params[nome];
 
   if (typeof valor !== 'string' || valor.trim().length === 0) {
-    throw new AppError('VALIDACAO', `Parametro "${nome}" nao informado na URL.`, nome);
+    throw new AppError('VALIDACAO', `Parâmetro "${nome}" não informado na URL.`, nome);
   }
 
   return valor;

@@ -33,9 +33,9 @@ export async function registrar(dados: RegistrarDTO): Promise<RespostaAutenticac
 
   if (conflito) {
     if (conflito.email === email) {
-      throw new AppError('CONFLITO', 'Ja existe um funcionario cadastrado com este e-mail.', 'email');
+      throw new AppError('CONFLITO', 'Já existe um funcionário cadastrado com este e-mail.', 'email');
     }
-    throw new AppError('CONFLITO', 'Ja existe um funcionario com esta matricula.', 'matricula');
+    throw new AppError('CONFLITO', 'Já existe um funcionário com esta matrícula.', 'matricula');
   }
 
   const usuario = await prisma.usuario.create({
@@ -63,7 +63,7 @@ export async function login(dados: LoginDTO): Promise<RespostaAutenticacao> {
   }
 
   if (!usuario.ativo) {
-    throw new AppError('SEM_PERMISSAO', 'Este cadastro esta inativo. Procure o RH.');
+    throw new AppError('SEM_PERMISSAO', 'Este cadastro está inativo. Procure o RH.');
   }
 
   return { token: gerarToken(usuario.id), usuario: paraPublico(usuario) };

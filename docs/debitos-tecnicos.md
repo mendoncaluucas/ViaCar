@@ -1,6 +1,6 @@
 # ViaCar — Débitos Técnicos e Instruções para o Próximo Grupo
 
-> Última revisão: 11/09/2026 (após o D2)
+> Última revisão: 11/09/2026 (revisão de arquitetura anterior ao D3)
 > Responsável pelo registro: Lucas Rogério Mendonça — Desenvolvedor Backend
 
 Este documento registra atalhos assumidos, limites conhecidos e as armadilhas que já custaram tempo. Se você está pegando o projeto para continuar no N2/N3, **leia a seção 3 antes de escrever qualquer linha** — ela lista o que quebra silenciosamente.
@@ -29,6 +29,24 @@ Descoberto na revisão pré-commit do D2. Violação de constraint chega ao Node
 O segundo caso é justamente o da trigger da RN-01. Sem tratamento, o motorista que tentasse ofertar vagas demais receberia *"Erro inesperado no servidor"* em vez da mensagem correta.
 
 **Como foi resolvido:** `shared/errors/traduzir-erro-do-banco.ts` traduz os dois formatos para o envelope da API. Mensagens de trigger prefixadas com `RN-` são repassadas ao usuário; qualquer outro `CHECK` vira mensagem genérica, para não vazar nome de coluna e de constraint.
+
+### DT-11 — Placa ficava bloqueada para sempre após remover o veículo · **RESOLVIDO**
+
+Achado na revisão anterior ao D3. Como a remoção é lógica (`ativo: false`) e a placa continua ocupando o índice único, o funcionário que removesse o próprio carro levava `409` para sempre ao tentar recadastrá-lo — e o carro nem aparecia na listagem, que filtra `ativo: true`. Beco sem saída.
+
+**Como foi resolvido:** `criar()` agora distingue três casos — placa de outro funcionário (409), veículo próprio ainda ativo (409) e **veículo próprio removido (reativa o registro existente)**.
+
+A reativação mantém o **mesmo `id`** de propósito: um `create` novo dividiria o histórico de caronas entre dois registros do mesmo carro físico.
+
+### DT-12 — Filtro de data divergente entre `atualizar()` e `inativar()` · **RESOLVIDO**
+
+`inativar()` só considerava caronas futuras; `atualizar()` considerava qualquer carona. Combinado com o DT-09 (não existe job que mova `ABERTA` → `CONCLUIDA`), uma carona da semana passada parada em `ABERTA` **travaria a redução de capacidade do veículo para sempre**.
+
+**Como foi resolvido:** os dois métodos usam `caronasFuturasEmUso(veiculoId)`, que centraliza o recorte por status e por data.
+
+### DT-13 — `carona.veiculo_id` sem índice · **RESOLVIDO**
+
+O Postgres não cria índice automático para chave estrangeira (diferente do MySQL), e as duas checagens de "este veículo tem carona?" filtram por essa coluna. Migration `indice_carona_veiculo`. Confirmado com `EXPLAIN`: o planejador usa `carona_veiculo_id_idx`.
 
 ---
 
@@ -69,23 +87,35 @@ São comportamentos **verificados empiricamente**, não suposições. Cada um j�
 
 > **Regra obrigatória:** sempre converter com `horaParaTexto()` e `textoParaHora()`. Nunca formatar esse `Date` com `toLocaleTimeString()` ou com a data completa — aí sim o fuso entra e o horário anda.
 
-### 3.4. `vagasDisponiveis` é calculado, nunca coluna
+### 3.4. Nunca valide query string escrevendo em `req.query`
+
+No Express 5 `req.query` é um **getter**. Atribuir nele não lança erro — e também não tem efeito. Testado:
+
+```json
+{ "atribuicaoDireta": "permitida", "queryDepois": { "a": "1" } }
+```
+
+Ou seja: a validação rodaria, mas o valor normalizado pelo Zod (números convertidos, datas parseadas, defaults aplicados) seria **descartado em silêncio**, e o controller continuaria lendo strings cruas.
+
+> **Regra obrigatória:** use `validarQuery(esquema)` na rota e `consultaValidada<T>(req)` no controller. O middleware escreve em `req.consulta`.
+
+### 3.5. `vagasDisponiveis` é calculado, nunca coluna
 
 `vagasOfertadas - COUNT(reservas CONFIRMADA)`. Não crie coluna para isso: ela dessincroniza no primeiro cancelamento.
 
-### 3.5. A RN-02 precisa de transação com lock
+### 3.6. A RN-02 precisa de transação com lock
 
 Duas pessoas reservando a última vaga ao mesmo tempo passam as duas por um `if (count < vagas)` ingênuo.
 
 > **Regra obrigatória:** `prisma.$transaction` com `SELECT ... FOR UPDATE` na linha da carona antes de contar e inserir. O índice parcial `reserva_confirmada_unica_por_carona` é a rede de segurança, não a solução — ele impede reserva duplicada do mesmo passageiro, não o overbooking entre passageiros diferentes.
 
-### 3.6. Nada é apagado de verdade
+### 3.7. Nada é apagado de verdade
 
 Não existe `onDelete: Cascade` em lugar nenhum do schema — de propósito. Usuário e veículo são desativados (`ativo = false`). Apagar em cascata destruiria o histórico de caronas, que é exatamente a base da pontuação (N2) e da avaliação de conduta (N3).
 
 > Tentar `DELETE` num usuário com histórico devolve `P2003` e é traduzido para HTTP 409. Isso é o comportamento desejado, não um bug.
 
-### 3.7. Os status `REALIZADA` e `NAO_COMPARECEU` não são decoração
+### 3.8. Os status `REALIZADA` e `NAO_COMPARECEU` não são decoração
 
 `StatusReserva` já prevê os dois. Eles existem para alimentar pontos e conduta no N2/N3. **Não remova do enum** — remover exige migration destrutiva depois.
 

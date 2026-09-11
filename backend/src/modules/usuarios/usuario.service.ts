@@ -7,7 +7,7 @@ export async function buscarPerfil(usuarioId: string): Promise<UsuarioPublico> {
   const usuario = await prisma.usuario.findUnique({ where: { id: usuarioId } });
 
   if (!usuario) {
-    throw new AppError('NAO_ENCONTRADO', 'Funcionario nao encontrado.');
+    throw new AppError('NAO_ENCONTRADO', 'Funcionário não encontrado.');
   }
 
   return paraPublico(usuario);

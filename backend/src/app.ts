@@ -47,7 +47,7 @@ app.use('/veiculos', veiculoRoutes);
 // Rota inexistente cai no mesmo envelope de erro do resto da API, em vez do
 // HTML padrao do Express - o frontend trata um formato so.
 app.use((req, _res, next) => {
-  next(new AppError('NAO_ENCONTRADO', `Rota ${req.method} ${req.originalUrl} nao existe.`));
+  next(new AppError('NAO_ENCONTRADO', `Rota ${req.method} ${req.originalUrl} não existe.`));
 });
 
 app.use(tratarErros);

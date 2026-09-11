@@ -24,7 +24,7 @@ export const tratarErros: ErrorRequestHandler = (erro, _req, res, _next) => {
     const problema = erro.issues[0];
     res.status(400).json({
       erro: 'VALIDACAO',
-      mensagem: problema?.message ?? 'Dados invalidos.',
+      mensagem: problema?.message ?? 'Dados inválidos.',
       campo: problema?.path.join('.'),
     });
     return;

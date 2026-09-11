@@ -11,19 +11,19 @@ const placa = z
   .trim()
   .transform((valor) => valor.toUpperCase().replace(/[\s-]/g, ''))
   .refine((valor) => FORMATO_PLACA.test(valor), {
-    message: 'Placa invalida. Use o formato ABC1D23 (Mercosul) ou ABC1234.',
+    message: 'Placa inválida. Use o formato ABC1D23 (Mercosul) ou ABC1234.',
   });
 
 export const criarVeiculoSchema = z.object({
   placa,
-  modelo: z.string().trim().min(2, 'Modelo e obrigatorio.').max(80),
-  cor: z.string().trim().min(2, 'Cor e obrigatoria.').max(40),
+  modelo: z.string().trim().min(2, 'Modelo é obrigatório.').max(80),
+  cor: z.string().trim().min(2, 'Cor é obrigatória.').max(40),
   // Nao conta o motorista: um Civic de 5 lugares tem capacidade 4.
   capacidadePassageiros: z.coerce
     .number()
-    .int('Capacidade precisa ser um numero inteiro.')
-    .min(CAPACIDADE_MINIMA, 'O veiculo precisa ter ao menos 1 vaga para passageiro.')
-    .max(CAPACIDADE_MAXIMA, `Capacidade maxima e ${CAPACIDADE_MAXIMA} passageiros.`),
+    .int('Capacidade precisa ser um número inteiro.')
+    .min(CAPACIDADE_MINIMA, 'O veículo precisa ter ao menos 1 vaga para passageiro.')
+    .max(CAPACIDADE_MAXIMA, `Capacidade máxima é ${CAPACIDADE_MAXIMA} passageiros.`),
 });
 
 export const atualizarVeiculoSchema = criarVeiculoSchema.partial().refine(

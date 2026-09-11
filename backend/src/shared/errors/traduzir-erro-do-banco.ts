@@ -33,18 +33,18 @@ function traduzirConhecido(erro: Prisma.PrismaClientKnownRequestError): AppError
       return new AppError(
         'CONFLITO',
         campo
-          ? `Ja existe um registro cadastrado com este valor de "${campo}".`
-          : 'Ja existe um registro cadastrado com estes dados.',
+          ? `Já existe um registro cadastrado com este valor de "${campo}".`
+          : 'Já existe um registro cadastrado com estes dados.',
         campo,
       );
     }
     case 'P2003':
       return new AppError(
         'CONFLITO',
-        'Este registro esta vinculado a outros e por isso nao pode ser removido.',
+        'Este registro está vinculado a outros e por isso não pode ser removido.',
       );
     case 'P2025':
-      return new AppError('NAO_ENCONTRADO', 'Registro nao encontrado.');
+      return new AppError('NAO_ENCONTRADO', 'Registro não encontrado.');
     default:
       return null;
   }
@@ -64,12 +64,12 @@ function traduzirCru(erro: Prisma.PrismaClientUnknownRequestError): AppError | n
         'REGRA_NEGOCIO',
         mensagemDoBanco.startsWith('RN-')
           ? mensagemDoBanco
-          : 'Os dados informados violam uma regra de negocio do sistema.',
+          : 'Os dados informados violam uma regra de negócio do sistema.',
       );
     case POSTGRES_VIOLACAO_UNIQUE:
-      return new AppError('CONFLITO', 'Ja existe um registro cadastrado com estes dados.');
+      return new AppError('CONFLITO', 'Já existe um registro cadastrado com estes dados.');
     case POSTGRES_VIOLACAO_FK:
-      return new AppError('CONFLITO', 'Este registro esta vinculado a outros e nao pode ser alterado.');
+      return new AppError('CONFLITO', 'Este registro está vinculado a outros e não pode ser alterado.');
     default:
       return null;
   }

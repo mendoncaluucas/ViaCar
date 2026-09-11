@@ -8,15 +8,15 @@ interface ConteudoToken {
 }
 
 /**
- * Exige `Authorization: Bearer <token>` valido. Em caso de token ausente,
- * malformado ou expirado, responde 401 - e o frontend trata isso num
- * interceptor unico, mandando o usuario de volta para o login.
+ * Exige `Authorization: Bearer <token>` válido. Em caso de token ausente,
+ * malformado ou expirado, responde 401 — e o frontend trata isso num
+ * interceptor único, mandando o usuário de volta para o login.
  */
 export const autenticar: RequestHandler = (req, _res, next) => {
   const cabecalho = req.headers.authorization;
 
   if (!cabecalho?.startsWith('Bearer ')) {
-    throw new AppError('NAO_AUTENTICADO', 'Token de acesso nao informado.');
+    throw new AppError('NAO_AUTENTICADO', 'Token de acesso não informado.');
   }
 
   const token = cabecalho.slice('Bearer '.length).trim();
@@ -27,19 +27,19 @@ export const autenticar: RequestHandler = (req, _res, next) => {
     next();
   } catch (erro) {
     if (erro instanceof jwt.TokenExpiredError) {
-      throw new AppError('NAO_AUTENTICADO', 'Sessao expirada. Faca login novamente.');
+      throw new AppError('NAO_AUTENTICADO', 'Sessão expirada. Faça login novamente.');
     }
-    throw new AppError('NAO_AUTENTICADO', 'Token de acesso invalido.');
+    throw new AppError('NAO_AUTENTICADO', 'Token de acesso inválido.');
   }
 };
 
 /**
- * Le o id do usuario logado. Usar sempre isto em vez de `req.usuarioId` direto:
+ * Lê o id do usuário logado. Usar sempre isto em vez de `req.usuarioId` direto:
  * a checagem garante que a rota realmente passou pelo middleware `autenticar`.
  */
 export function usuarioLogado(req: { usuarioId?: string }): string {
   if (!req.usuarioId) {
-    throw new AppError('NAO_AUTENTICADO', 'Rota protegida sem usuario autenticado.');
+    throw new AppError('NAO_AUTENTICADO', 'Rota protegida sem usuário autenticado.');
   }
   return req.usuarioId;
 }

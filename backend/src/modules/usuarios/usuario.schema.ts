@@ -8,7 +8,7 @@ import { z } from 'zod';
 export const atualizarPerfilSchema = z
   .object({
     telefone: z.string().trim().max(20).nullable().optional(),
-    bairro: z.string().trim().min(2, 'Bairro e obrigatorio.').max(80).optional(),
+    bairro: z.string().trim().min(2, 'Bairro é obrigatório.').max(80).optional(),
   })
   .refine((dados) => Object.keys(dados).length > 0, {
     message: 'Informe ao menos um campo para atualizar.',

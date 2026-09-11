@@ -142,6 +142,9 @@ model Carona {
 
   @@unique([rotaId, dataPartida], name: "carona_rota_data_unica")
   @@index([dataPartida, status])
+  /// O Postgres nao cria indice automatico para chave estrangeira (diferente do
+  /// MySQL). Sem isto, toda checagem de "este veiculo tem carona?" vira scan.
+  @@index([veiculoId])
   @@map("carona")
 }
 
