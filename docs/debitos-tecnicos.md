@@ -48,6 +48,29 @@ A reativação mantém o **mesmo `id`** de propósito: um `create` novo dividiri
 
 O Postgres não cria índice automático para chave estrangeira (diferente do MySQL), e as duas checagens de "este veículo tem carona?" filtram por essa coluna. Migration `indice_carona_veiculo`. Confirmado com `EXPLAIN`: o planejador usa `carona_veiculo_id_idx`.
 
+### DT-10 — Sem testes automatizados · **RESOLVIDO para D1/D2**
+
+`npm test` retornava exit code 1 (*"No test files found"*), o que deixaria o CI vermelho no primeiro build, e nenhuma rede protegia refatoração.
+
+**Como foi resolvido:** suíte com **43 testes** rodando em ~6 s, contra um **banco de verdade** (`viacar_test`), não contra mocks. A decisão é deliberada: as regras mais críticas — a trigger da RN-01 e o índice parcial da RN-02 — **vivem dentro do banco**, e um mock provaria nada sobre elas.
+
+| Arquivo | Cobre |
+|---|---|
+| `tests/shared/horario.test.ts` | Conversão de fuso e a garantia que sustenta o `UNIQUE` da carona |
+| `tests/regras-negocio/rn-01-capacidade.test.ts` | Trigger da RN-01, CHECKs, índice parcial, proteção do histórico |
+| `tests/regras-negocio/veiculo.test.ts` | DT-11, DT-12, posse e remoção lógica |
+| `tests/regras-negocio/auth.test.ts` | Cadastro, hash de senha, e a mensagem genérica de login |
+
+**Ainda falta:** as regras do D3/D4 (abertura de carona pela API, RN-02 com transação). Escrever junto com o código, não depois.
+
+**Trava de segurança:** a suíte dá `TRUNCATE` nas tabelas antes de cada teste. Dois pontos do código recusam rodar se `DATABASE_URL` não contiver `_test` — apontar para o banco de desenvolvimento apagaria os dados do dia.
+
+### DT-14 — `prisma/seed.ts` fora da verificação de tipos · **RESOLVIDO**
+
+O `tsconfig.json` incluía apenas `src/**/*.ts`. Como o seed roda via `tsx`, que apaga os tipos sem verificar, um erro de tipo ali só apareceria em execução.
+
+**Como foi resolvido:** o `tsconfig.json` passou a verificar `src`, `tests` e `prisma`, e o `npm run build` usa um `tsconfig.build.json` separado que emite só `src`. Na primeira execução com a nova configuração apareceram **11 erros latentes no seed** — todos corrigidos.
+
 ---
 
 ## 2. Débitos abertos
@@ -61,7 +84,8 @@ O Postgres não cria índice automático para chave estrangeira (diferente do My
 | DT-06 | `bairro` é texto livre | "Costa e Silva" ≠ "costa e silva" quebra a busca de caronas | Tabela `bairro` ou normalização na entrada |
 | DT-07 | Recorrência de rota é simplificada (`diasSemana`) | Não trata feriado nem exceção | Tabela de exceções de calendário |
 | DT-09 | Sem job de transição de status da carona | `ABERTA` → `EM_ANDAMENTO` → `CONCLUIDA` na mão | Agendador, ou transição sob demanda na leitura |
-| DT-10 | Testes automatizados ainda não escritos | Regressão passa batido | Vitest sobre as RNs — previsto para o D6 |
+| DT-15 | ESLint e Prettier não configurados | A Seção 6.3 do acordo condiciona aprovação de PR ao linter — hoje é inaplicável | `@typescript-eslint` + Prettier + passo no CI (**DevOps**) |
+| DT-16 | Sem `helmet` nem cabeçalhos de segurança | Respostas sem proteção básica de browser | `app.use(helmet())` |
 
 ---
 
