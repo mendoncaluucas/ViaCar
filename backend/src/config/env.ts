@@ -10,7 +10,12 @@ const esquemaEnv = z.object({
   PORT: z.coerce.number().int().positive().default(3333),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   JWT_SECRET: z.string().min(16, 'precisa ter ao menos 16 caracteres'),
-  JWT_EXPIRES_IN: z.string().default('8h'),
+  // Validado aqui de proposito: um valor como "8x" so estouraria no primeiro login,
+  // e o sentido deste arquivo e a aplicacao morrer no boot, nao na demonstracao.
+  JWT_EXPIRES_IN: z
+    .string()
+    .regex(/^\d+[smhd]$/, 'use um formato como "8h", "30m" ou "7d"')
+    .default('8h'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
 });
 
