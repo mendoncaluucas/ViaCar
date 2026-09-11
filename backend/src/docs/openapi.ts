@@ -43,7 +43,11 @@ export const openapi = {
       '',
       '**Datas** em ISO 8601 UTC. **Ids** em UUID v4. **Corpo** em JSON camelCase.',
       '',
-      '_Caronas e reservas entram no D3/D4 e ainda nao aparecem aqui._',
+      '⚠️ **Fuso horario:** `dataPartida` e o instante real. Uma carona das 07:30 em Joinville',
+      'chega como `10:30Z`. Exiba com `toLocaleTimeString("pt-BR")` — cortar a string do ISO',
+      'mostraria 10:30. Ja `rota.horarioPartida` e hora de parede pura, vem como `"07:30"`.',
+      '',
+      '_Reservas entram no D4 e ainda nao aparecem aqui._',
     ].join('\n'),
   },
   servers: [{ url: 'http://localhost:3333', description: 'Desenvolvimento local' }],
@@ -52,6 +56,8 @@ export const openapi = {
     { name: 'Autenticacao', description: 'Cadastro e login de funcionarios' },
     { name: 'Perfil', description: 'Dados do funcionario logado' },
     { name: 'Veiculos', description: 'Carros do funcionario — a capacidade define o teto da RN-01' },
+    { name: 'Rotas', description: 'O trajeto recorrente: origem, destino, horario e dias da semana' },
+    { name: 'Caronas', description: 'A viagem de um dia — onde vive a RN-01 do case' },
   ],
   components: {
     securitySchemes: {
@@ -116,6 +122,121 @@ export const openapi = {
           ativo: true,
           criadoEm: '2026-09-11T09:15:00.000Z',
         },
+      },
+      Rota: {
+        type: 'object',
+        description: 'O trajeto recorrente do motorista. A viagem de um dia específico é a Carona.',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          apelido: { type: 'string' },
+          origemEndereco: { type: 'string' },
+          origemBairro: { type: 'string' },
+          destinoEndereco: { type: 'string' },
+          destinoBairro: { type: 'string' },
+          horarioPartida: {
+            type: 'string',
+            example: '07:30',
+            description: 'Hora de parede, sem data e sem fuso. Não precisa de conversão no frontend.',
+          },
+          sentido: { type: 'string', enum: ['IDA', 'VOLTA'] },
+          diasSemana: {
+            type: 'array',
+            items: { type: 'integer', minimum: 1, maximum: 7 },
+            description: '1 = segunda ... 7 = domingo. Devolvido sem repetição e em ordem.',
+          },
+          ativa: { type: 'boolean' },
+          criadoEm: { type: 'string', format: 'date-time' },
+        },
+        example: {
+          id: '7c2f9a10-4b6e-4d0a-9b2f-8e1c5a7d3f44',
+          apelido: 'Costa e Silva → Empresa',
+          origemEndereco: 'Rua Ministro Calógeras, 1200',
+          origemBairro: 'Costa e Silva',
+          destinoEndereco: 'Rod. Dr. Paulo Schroeder, 3000',
+          destinoBairro: 'Zona Industrial Norte',
+          horarioPartida: '07:30',
+          sentido: 'IDA',
+          diasSemana: [1, 2, 3, 4, 5],
+          ativa: true,
+          criadoEm: '2026-09-11T09:20:00.000Z',
+        },
+      },
+      Carona: {
+        type: 'object',
+        description: 'A viagem de um dia específico, gerada a partir de uma Rota.',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          dataPartida: {
+            type: 'string',
+            format: 'date-time',
+            description:
+              'Instante real em UTC. 07:30 em Joinville chega como 10:30Z — use toLocaleTimeString para exibir.',
+          },
+          vagasOfertadas: { type: 'integer' },
+          vagasDisponiveis: {
+            type: 'integer',
+            description: 'Calculado: vagasOfertadas menos as reservas confirmadas. Nunca recalcule no frontend.',
+          },
+          status: {
+            type: 'string',
+            enum: ['ABERTA', 'LOTADA', 'EM_ANDAMENTO', 'CONCLUIDA', 'CANCELADA'],
+          },
+          observacao: { type: 'string', nullable: true },
+          motorista: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              nome: { type: 'string' },
+              bairro: { type: 'string' },
+              telefone: { type: 'string', nullable: true },
+            },
+          },
+          veiculo: {
+            type: 'object',
+            properties: {
+              placa: { type: 'string' },
+              modelo: { type: 'string' },
+              cor: { type: 'string' },
+              capacidadePassageiros: { type: 'integer' },
+            },
+          },
+          rota: {
+            type: 'object',
+            properties: {
+              apelido: { type: 'string' },
+              origemEndereco: { type: 'string' },
+              origemBairro: { type: 'string' },
+              destinoEndereco: { type: 'string' },
+              destinoBairro: { type: 'string' },
+              horarioPartida: { type: 'string', example: '07:30' },
+              sentido: { type: 'string', enum: ['IDA', 'VOLTA'] },
+            },
+          },
+          criadoEm: { type: 'string', format: 'date-time' },
+        },
+      },
+      CaronaDetalhada: {
+        allOf: [
+          { $ref: '#/components/schemas/Carona' },
+          {
+            type: 'object',
+            properties: {
+              passageiros: {
+                type: 'array',
+                description: 'Só aparece em GET /caronas/{id}. Na listagem, use vagasDisponiveis.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string', format: 'uuid' },
+                    nome: { type: 'string' },
+                    bairro: { type: 'string' },
+                    pontoEmbarque: { type: 'string', nullable: true },
+                  },
+                },
+              },
+            },
+          },
+        ],
       },
     },
   },
@@ -372,13 +493,311 @@ export const openapi = {
         tags: ['Veiculos'],
         summary: 'Remove um veiculo',
         description:
-          'Soft delete: o registro fica com `ativo: false`. O veiculo nunca e apagado porque as caronas passadas apontam para ele.',
+          'Soft delete: o registro fica com `ativo: false`. O veiculo nunca e apagado porque as caronas passadas apontam para ele. Recadastrar a mesma placa reativa este registro.',
         responses: {
           204: { description: 'Veiculo inativado' },
           401: respostaErro('Nao autenticado'),
           403: respostaErro('O veiculo pertence a outro funcionario'),
           404: respostaErro('Veiculo nao encontrado'),
           422: respostaErro('Veiculo com carona agendada'),
+        },
+      },
+    },
+
+    '/rotas': {
+      post: {
+        tags: ['Rotas'],
+        summary: 'Cadastra uma rota',
+        description: 'O trajeto recorrente. Cadastra uma vez e gera caronas a partir dele.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: [
+                  'apelido',
+                  'origemEndereco',
+                  'origemBairro',
+                  'destinoEndereco',
+                  'destinoBairro',
+                  'horarioPartida',
+                  'sentido',
+                  'diasSemana',
+                ],
+                properties: {
+                  apelido: { type: 'string', minLength: 3, maxLength: 120 },
+                  origemEndereco: { type: 'string', minLength: 5, maxLength: 200 },
+                  origemBairro: { type: 'string', minLength: 2, maxLength: 80 },
+                  destinoEndereco: { type: 'string', minLength: 5, maxLength: 200 },
+                  destinoBairro: { type: 'string', minLength: 2, maxLength: 80 },
+                  horarioPartida: { type: 'string', example: '07:30' },
+                  sentido: { type: 'string', enum: ['IDA', 'VOLTA'] },
+                  diasSemana: { type: 'array', items: { type: 'integer', minimum: 1, maximum: 7 } },
+                },
+              },
+              example: {
+                apelido: 'Costa e Silva → Empresa',
+                origemEndereco: 'Rua Ministro Calógeras, 1200',
+                origemBairro: 'Costa e Silva',
+                destinoEndereco: 'Rod. Dr. Paulo Schroeder, 3000',
+                destinoBairro: 'Zona Industrial Norte',
+                horarioPartida: '07:30',
+                sentido: 'IDA',
+                diasSemana: [1, 2, 3, 4, 5],
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Rota cadastrada',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Rota' } } },
+          },
+          400: respostaErro('Payload invalido'),
+          401: respostaErro('Nao autenticado'),
+        },
+      },
+      get: {
+        tags: ['Rotas'],
+        summary: 'Lista as rotas ativas do motorista logado',
+        responses: {
+          200: {
+            description: 'Lista de rotas',
+            content: {
+              'application/json': {
+                schema: { type: 'array', items: { $ref: '#/components/schemas/Rota' } },
+              },
+            },
+          },
+          401: respostaErro('Nao autenticado'),
+        },
+      },
+    },
+    '/rotas/{id}': {
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      get: {
+        tags: ['Rotas'],
+        summary: 'Detalhe de uma rota',
+        responses: {
+          200: {
+            description: 'Rota',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Rota' } } },
+          },
+          403: respostaErro('A rota pertence a outro funcionario'),
+          404: respostaErro('Rota nao encontrada'),
+        },
+      },
+      patch: {
+        tags: ['Rotas'],
+        summary: 'Atualiza uma rota',
+        description:
+          'Alterar o horario NAO mexe nas caronas ja publicadas: o instante delas foi congelado na criacao, e mudar retroativamente moveria o horario combinado com quem ja reservou.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { type: 'object', minProperties: 1 },
+              example: { horarioPartida: '07:15', diasSemana: [1, 3, 5] },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Rota atualizada',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Rota' } } },
+          },
+          400: respostaErro('Payload invalido'),
+          403: respostaErro('A rota pertence a outro funcionario'),
+          404: respostaErro('Rota nao encontrada'),
+        },
+      },
+      delete: {
+        tags: ['Rotas'],
+        summary: 'Remove uma rota',
+        description: 'Soft delete. Caronas ja publicadas continuam validas.',
+        responses: {
+          204: { description: 'Rota inativada' },
+          403: respostaErro('A rota pertence a outro funcionario'),
+          404: respostaErro('Rota nao encontrada'),
+          422: respostaErro('Rota com carona agendada'),
+        },
+      },
+    },
+
+    '/caronas': {
+      post: {
+        tags: ['Caronas'],
+        summary: 'Abre uma carona',
+        description: [
+          '**Aqui vive a RN-01 do case:** `vagasOfertadas` não pode passar de `veiculo.capacidadePassageiros`.',
+          'A regra é garantida em duas camadas — validação no serviço, com mensagem explicando qual carro e quantas vagas,',
+          'e uma trigger no banco que barra até escrita que não passa pela API.',
+          '',
+          '**A data vem como "AAAA-MM-DD", não como instante.** A hora sai de `rota.horarioPartida`.',
+          'É isso que faz "uma carona por rota por dia" ser realmente garantido.',
+        ].join('\n'),
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['rotaId', 'veiculoId', 'data', 'vagasOfertadas'],
+                properties: {
+                  rotaId: { type: 'string', format: 'uuid' },
+                  veiculoId: { type: 'string', format: 'uuid' },
+                  data: { type: 'string', example: '2026-09-15', description: 'AAAA-MM-DD' },
+                  vagasOfertadas: { type: 'integer', minimum: 1, maximum: 8 },
+                  observacao: { type: 'string', maxLength: 255 },
+                },
+              },
+              example: {
+                rotaId: '7c2f9a10-4b6e-4d0a-9b2f-8e1c5a7d3f44',
+                veiculoId: '3d7a11c4-9e02-4b8a-96f1-c0d4e7a51b33',
+                data: '2026-09-15',
+                vagasOfertadas: 4,
+                observacao: 'Passo no posto antes, saio 5 min mais cedo',
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Carona aberta',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Carona' } } },
+          },
+          400: respostaErro('Payload invalido'),
+          403: respostaErro('A rota ou o veiculo pertence a outro funcionario'),
+          404: respostaErro('Rota ou veiculo nao encontrado'),
+          409: respostaErro('Ja existe carona desta rota neste dia'),
+          422: respostaErro('RN-01 violada, veiculo removido, ou data no passado'),
+        },
+      },
+      get: {
+        tags: ['Caronas'],
+        summary: 'Busca caronas disponiveis',
+        description:
+          'A tela que ataca o problema do case. Devolve apenas caronas ABERTAS e futuras, e **exclui as do proprio usuario** — a busca existe para achar quem vai no mesmo caminho, e a RN-04 proibe reservar vaga na propria carona.',
+        parameters: [
+          {
+            name: 'bairroOrigem',
+            in: 'query',
+            schema: { type: 'string' },
+            description: 'Busca parcial, ignora maiusculas.',
+            example: 'Costa e Silva',
+          },
+          { name: 'bairroDestino', in: 'query', schema: { type: 'string' } },
+          {
+            name: 'data',
+            in: 'query',
+            schema: { type: 'string', example: '2026-09-15' },
+            description: 'AAAA-MM-DD. Filtra o dia no fuso da empresa.',
+          },
+          { name: 'sentido', in: 'query', schema: { type: 'string', enum: ['IDA', 'VOLTA'] } },
+        ],
+        responses: {
+          200: {
+            description: 'Caronas encontradas, da mais proxima para a mais distante',
+            content: {
+              'application/json': {
+                schema: { type: 'array', items: { $ref: '#/components/schemas/Carona' } },
+              },
+            },
+          },
+          400: respostaErro('Filtro invalido'),
+          401: respostaErro('Nao autenticado'),
+        },
+      },
+    },
+    '/caronas/minhas': {
+      get: {
+        tags: ['Caronas'],
+        summary: 'Caronas em que sou o motorista',
+        description: 'De hoje em diante, da mais proxima para a mais distante.',
+        responses: {
+          200: {
+            description: 'Minhas caronas',
+            content: {
+              'application/json': {
+                schema: { type: 'array', items: { $ref: '#/components/schemas/Carona' } },
+              },
+            },
+          },
+          401: respostaErro('Nao autenticado'),
+        },
+      },
+    },
+    '/caronas/{id}': {
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      get: {
+        tags: ['Caronas'],
+        summary: 'Detalhe da carona, com a lista de passageiros',
+        responses: {
+          200: {
+            description: 'Carona detalhada',
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/CaronaDetalhada' } },
+            },
+          },
+          404: respostaErro('Carona nao encontrada'),
+        },
+      },
+      patch: {
+        tags: ['Caronas'],
+        summary: 'Altera vagas ou observacao',
+        description:
+          'Revalida a RN-01. Tambem recusa reduzir as vagas abaixo do numero de reservas ja confirmadas.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                minProperties: 1,
+                properties: {
+                  vagasOfertadas: { type: 'integer', minimum: 1, maximum: 8 },
+                  observacao: { type: 'string', nullable: true, maxLength: 255 },
+                },
+              },
+              example: { vagasOfertadas: 3 },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Carona atualizada',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Carona' } } },
+          },
+          400: respostaErro('Payload invalido'),
+          403: respostaErro('A carona e de outro motorista'),
+          404: respostaErro('Carona nao encontrada'),
+          422: respostaErro('RN-01 violada, vagas abaixo das reservas, ou carona nao editavel'),
+        },
+      },
+    },
+    '/caronas/{id}/cancelar': {
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      post: {
+        tags: ['Caronas'],
+        summary: 'Cancela a carona',
+        description:
+          'RN-08: cancela em cascata as reservas confirmadas, em transacao. Deixar reserva confirmada apontando para carona cancelada faria o passageiro acreditar que tem vaga numa viagem que nao vai acontecer.',
+        responses: {
+          200: {
+            description: 'Carona cancelada',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Carona' } } },
+          },
+          403: respostaErro('A carona e de outro motorista'),
+          404: respostaErro('Carona nao encontrada'),
+          409: respostaErro('Carona ja cancelada'),
+          422: respostaErro('Carona ja concluida'),
         },
       },
     },

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { combinarDiaEHorario, horaParaTexto, textoParaHora } from '../../src/shared/utils/horario';
+import {
+  combinarDiaEHorario,
+  horaParaTexto,
+  inicioDoDiaAtual,
+  intervaloDoDia,
+  textoParaHora,
+} from '../../src/shared/utils/horario';
 
 describe('conversão de hora do dia', () => {
   it('preserva o horário no ida e volta entre texto e TIME', () => {
@@ -47,5 +53,43 @@ describe('combinarDiaEHorario', () => {
     ].map((m) => combinarDiaEHorario(new Date(m), horario).toISOString());
 
     expect(new Set(momentos).size).toBe(1);
+  });
+});
+
+describe('inicioDoDiaAtual', () => {
+  it('devolve meia-noite no fuso da empresa, não uma hora arbitrária', () => {
+    // Meia-noite em UTC-3 é 03:00 UTC.
+    expect(inicioDoDiaAtual().toISOString()).toMatch(/T03:00:00\.000Z$/);
+  });
+
+  it('cai no passado, mas nunca mais de 24 horas atrás', () => {
+    const inicio = inicioDoDiaAtual().getTime();
+    const agora = Date.now();
+
+    expect(inicio).toBeLessThanOrEqual(agora);
+    expect(agora - inicio).toBeLessThan(24 * 60 * 60 * 1000);
+  });
+
+  it('coincide com o começo do intervalo do dia de hoje', () => {
+    const hojeLocal = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    expect(inicioDoDiaAtual().toISOString()).toBe(intervaloDoDia(hojeLocal).inicio.toISOString());
+  });
+});
+
+describe('intervaloDoDia', () => {
+  it('cobre exatamente 24 horas a partir da meia-noite local', () => {
+    const { inicio, fim } = intervaloDoDia('2026-09-15');
+
+    expect(inicio.toISOString()).toBe('2026-09-15T03:00:00.000Z');
+    expect(fim.getTime() - inicio.getTime()).toBe(24 * 60 * 60 * 1000);
+  });
+
+  it('inclui a carona da volta das 17:40, que em UTC cai no mesmo dia', () => {
+    const { inicio, fim } = intervaloDoDia('2026-09-15');
+    const volta = combinarDiaEHorario('2026-09-15', textoParaHora('17:40'));
+
+    expect(volta.getTime()).toBeGreaterThanOrEqual(inicio.getTime());
+    expect(volta.getTime()).toBeLessThan(fim.getTime());
   });
 });

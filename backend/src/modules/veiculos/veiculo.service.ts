@@ -1,6 +1,7 @@
 import { StatusCarona, type Prisma, type Veiculo } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/app-error';
+import { paraPublico, type VeiculoPublico } from './veiculo.mapper';
 import type { AtualizarVeiculoDTO, CriarVeiculoDTO } from './veiculo.schema';
 
 const STATUS_EM_USO: StatusCarona[] = [
@@ -48,11 +49,11 @@ async function carregarDoDono(veiculoId: string, usuarioId: string): Promise<Vei
  * recadastrar o próprio carro — e o histórico de caronas ficaria dividido entre
  * dois registros do mesmo veículo.
  */
-export async function criar(usuarioId: string, dados: CriarVeiculoDTO): Promise<Veiculo> {
+export async function criar(usuarioId: string, dados: CriarVeiculoDTO): Promise<VeiculoPublico> {
   const existente = await prisma.veiculo.findUnique({ where: { placa: dados.placa } });
 
   if (!existente) {
-    return prisma.veiculo.create({ data: { ...dados, usuarioId } });
+    return paraPublico(await prisma.veiculo.create({ data: { ...dados, usuarioId } }));
   }
 
   if (existente.usuarioId !== usuarioId) {
@@ -71,28 +72,32 @@ export async function criar(usuarioId: string, dados: CriarVeiculoDTO): Promise<
     );
   }
 
-  return prisma.veiculo.update({
-    where: { id: existente.id },
-    data: { ...dados, ativo: true },
-  });
+  return paraPublico(
+    await prisma.veiculo.update({
+      where: { id: existente.id },
+      data: { ...dados, ativo: true },
+    }),
+  );
 }
 
-export async function listarDoUsuario(usuarioId: string): Promise<Veiculo[]> {
-  return prisma.veiculo.findMany({
+export async function listarDoUsuario(usuarioId: string): Promise<VeiculoPublico[]> {
+  const veiculos = await prisma.veiculo.findMany({
     where: { usuarioId, ativo: true },
     orderBy: { criadoEm: 'asc' },
   });
+
+  return veiculos.map(paraPublico);
 }
 
-export async function buscarPorId(veiculoId: string, usuarioId: string): Promise<Veiculo> {
-  return carregarDoDono(veiculoId, usuarioId);
+export async function buscarPorId(veiculoId: string, usuarioId: string): Promise<VeiculoPublico> {
+  return paraPublico(await carregarDoDono(veiculoId, usuarioId));
 }
 
 export async function atualizar(
   veiculoId: string,
   usuarioId: string,
   dados: AtualizarVeiculoDTO,
-): Promise<Veiculo> {
+): Promise<VeiculoPublico> {
   const veiculo = await carregarDoDono(veiculoId, usuarioId);
 
   if (dados.placa && dados.placa !== veiculo.placa) {
@@ -137,7 +142,7 @@ export async function atualizar(
     }
   }
 
-  return prisma.veiculo.update({ where: { id: veiculoId }, data: dados });
+  return paraPublico(await prisma.veiculo.update({ where: { id: veiculoId }, data: dados }));
 }
 
 /**
