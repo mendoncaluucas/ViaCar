@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../errors/app-error';
+import { traduzirErroDoBanco } from '../errors/traduzir-erro-do-banco';
 
 /**
  * Tratador central de erros. Nenhum controller monta JSON de erro na mao -
@@ -23,8 +24,22 @@ export const tratarErros: ErrorRequestHandler = (erro, _req, res, _next) => {
     const problema = erro.issues[0];
     res.status(400).json({
       erro: 'VALIDACAO',
-      mensagem: problema?.message ?? 'Dados invalidos.',
+      mensagem: problema?.message ?? 'Dados inválidos.',
       campo: problema?.path.join('.'),
+    });
+    return;
+  }
+
+  // Constraint, trigger ou chave estrangeira do banco. Chegar aqui significa que
+  // a validacao do service deixou passar, entao o original vai para o log mesmo
+  // com a resposta tratada - e assim que a regra faltante e descoberta.
+  const doBanco = traduzirErroDoBanco(erro);
+  if (doBanco) {
+    console.warn('[ViaCar] Regra barrada pelo banco, nao pelo service:', erro);
+    res.status(doBanco.status).json({
+      erro: doBanco.codigo,
+      mensagem: doBanco.message,
+      campo: doBanco.campo,
     });
     return;
   }

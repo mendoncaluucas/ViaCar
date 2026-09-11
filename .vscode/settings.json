@@ -1,0 +1,18 @@
+{
+  // Faz o VS Code usar o TypeScript do projeto (5.9.3) em vez do que vem embutido
+  // no editor. Sem isto, cada pessoa do time ve erros diferentes conforme a versao
+  // do VS Code instalada - e nenhum deles corresponde ao que o `npm run typecheck` roda.
+  "typescript.tsdk": "backend/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+
+  // O .gitattributes normaliza para LF; alinhar o editor evita diff de 400 linhas
+  // por quebra de linha no primeiro Pull Request de quem usa Windows.
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true
+  }
+}

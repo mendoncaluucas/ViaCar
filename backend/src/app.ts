@@ -1,7 +1,12 @@
 import express from 'express';
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env';
 import { prisma } from './config/prisma';
+import { openapi } from './docs/openapi';
+import { authRoutes } from './modules/auth/auth.routes';
+import { usuarioRoutes } from './modules/usuarios/usuario.routes';
+import { veiculoRoutes } from './modules/veiculos/veiculo.routes';
 import { AppError } from './shared/errors/app-error';
 import { tratarErros } from './shared/middlewares/tratar-erros';
 
@@ -25,17 +30,24 @@ app.get('/health', async (_req, res) => {
   });
 });
 
-// As rotas dos modulos entram aqui a partir do D2:
-// app.use('/auth', authRoutes);
-// app.use('/veiculos', veiculoRoutes);
-// app.use('/rotas', rotaRoutes);
+// Contrato da API navegavel — e o que o frontend consulta enquanto desenvolve.
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapi, { customSiteTitle: 'ViaCar API' }));
+app.get('/openapi.json', (_req, res) => {
+  res.json(openapi);
+});
+
+app.use('/auth', authRoutes);
+app.use('/usuarios', usuarioRoutes);
+app.use('/veiculos', veiculoRoutes);
+
+// Caronas e reservas entram no D3/D4:
 // app.use('/caronas', caronaRoutes);
 // app.use('/reservas', reservaRoutes);
 
 // Rota inexistente cai no mesmo envelope de erro do resto da API, em vez do
 // HTML padrao do Express - o frontend trata um formato so.
 app.use((req, _res, next) => {
-  next(new AppError('NAO_ENCONTRADO', `Rota ${req.method} ${req.originalUrl} nao existe.`));
+  next(new AppError('NAO_ENCONTRADO', `Rota ${req.method} ${req.originalUrl} não existe.`));
 });
 
 app.use(tratarErros);

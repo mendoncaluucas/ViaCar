@@ -40,6 +40,21 @@ npm run dev
 
 API em `http://localhost:3333` · Swagger em `http://localhost:3333/docs`
 
+## Testes
+
+```bash
+cd backend
+npm test
+```
+
+Roda contra um banco **separado** (`viacar_test`), criado e migrado automaticamente na primeira execução — os dados de desenvolvimento não são tocados. Exige apenas que o container do Postgres esteja de pé.
+
+| Comando | O que faz |
+|---|---|
+| `npm test` | Executa a suíte uma vez |
+| `npm run test:watch` | Reexecuta a cada alteração |
+| `npm run typecheck` | Verifica os tipos de `src`, `tests` e `prisma` |
+
 ## Estrutura do repositório
 
 ```
