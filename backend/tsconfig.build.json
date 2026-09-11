@@ -1,0 +1,14 @@
+{
+  // Config do `npm run build`. Emite só o que vai para produção.
+  //
+  // O tsconfig.json base verifica tudo (src, tests e prisma/seed.ts) para que o
+  // editor e o `npm run typecheck` não deixem passar erro fora de src/ —
+  // o seed, por exemplo, roda via tsx, que apaga os tipos sem verificar nada.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "./src",
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*.ts"]
+}

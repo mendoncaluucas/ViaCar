@@ -48,16 +48,21 @@ async function main(): Promise<void> {
   const DIAS_UTEIS = [1, 2, 3, 4, 5];
 
   // ---------------------------------------------------------------- usuarios
-  const [vinicius, nicholas, willian, kaua, henrique, lucas] = await Promise.all(
-    [
-      { nome: 'Vinicius Steuernagel', email: 'vinicius@viacar.com.br', matricula: 'F-10001', bairro: 'Costa e Silva', telefone: '(47) 99812-4455' },
-      { nome: 'Nicholas Scoz dos Santos', email: 'nicholas@viacar.com.br', matricula: 'F-10002', bairro: 'Bucarein', telefone: '(47) 99730-1188' },
-      { nome: 'Willian Squena', email: 'willian@viacar.com.br', matricula: 'F-10003', bairro: 'Costa e Silva', telefone: '(47) 99655-2301' },
-      { nome: 'Kaua Lucindo', email: 'kaua@viacar.com.br', matricula: 'F-10004', bairro: 'Bucarein', telefone: '(47) 99521-7744' },
-      { nome: 'Henrique Cordeiro de Oliveira', email: 'henrique@viacar.com.br', matricula: 'F-10005', bairro: 'Costa e Silva', telefone: null },
-      { nome: 'Lucas Rogerio Mendonca', email: 'lucas@viacar.com.br', matricula: 'F-10006', bairro: 'Iririu', telefone: '(47) 99408-9012' },
-    ].map((dados) => prisma.usuario.create({ data: { ...dados, senhaHash } })),
-  );
+  // Criados um a um, e não por destructuring de Promise.all: o resultado do
+  // array daria `Usuario | undefined` para o TypeScript, obrigando a checagem
+  // de nulo em toda linha abaixo para provar algo que já sabemos.
+  const funcionario = (nome: string, email: string, matricula: string, bairro: string, telefone: string | null) =>
+    prisma.usuario.create({ data: { nome, email, matricula, bairro, telefone, senhaHash } });
+
+  const vinicius = await funcionario('Vinicius Steuernagel', 'vinicius@viacar.com.br', 'F-10001', 'Costa e Silva', '(47) 99812-4455');
+  const nicholas = await funcionario('Nicholas Scoz dos Santos', 'nicholas@viacar.com.br', 'F-10002', 'Bucarein', '(47) 99730-1188');
+  const willian = await funcionario('Willian Squena', 'willian@viacar.com.br', 'F-10003', 'Costa e Silva', '(47) 99655-2301');
+  const kaua = await funcionario('Kaua Lucindo', 'kaua@viacar.com.br', 'F-10004', 'Bucarein', '(47) 99521-7744');
+  const lucas = await funcionario('Lucas Rogerio Mendonca', 'lucas@viacar.com.br', 'F-10006', 'Iririu', '(47) 99408-9012');
+
+  // Henrique fica sem reserva de propósito: é o usuário para demonstrar o fluxo
+  // de reserva do zero na apresentação.
+  await funcionario('Henrique Cordeiro de Oliveira', 'henrique@viacar.com.br', 'F-10005', 'Costa e Silva', null);
 
   // ---------------------------------------------------------------- veiculos
   const civic = await prisma.veiculo.create({
