@@ -1,0 +1,381 @@
+import { Prisma, StatusCarona, StatusReserva, type Rota, type Veiculo } from '@prisma/client';
+import { prisma, type ClientePrisma } from '../../config/prisma';
+import { AppError } from '../../shared/errors/app-error';
+import { combinarDiaEHorario, inicioDoDiaAtual, intervaloDoDia } from '../../shared/utils/horario';
+import { carregarDoMotorista } from '../rotas/rota.service';
+import {
+  INCLUDE_DETALHE,
+  INCLUDE_RESUMO,
+  paraDetalhada,
+  paraPublica,
+  type CaronaComResumo,
+  type CaronaDetalhada,
+  type CaronaPublica,
+} from './carona.mapper';
+import type { AtualizarCaronaDTO, BuscarCaronasDTO, CriarCaronaDTO } from './carona.schema';
+
+const STATUS_EDITAVEIS: StatusCarona[] = [StatusCarona.ABERTA, StatusCarona.LOTADA];
+
+/**
+ * RN-01 — CRÍTICA, enunciada no case:
+ * o motorista não pode oferecer mais vagas do que a capacidade do seu veículo.
+ *
+ * A trigger `carona_valida_capacidade` garante a regra no banco, inclusive para
+ * escrita que não passa pela API. Esta validação existe em cima dela por um
+ * motivo diferente: produzir uma mensagem que o funcionário entenda, dizendo
+ * qual carro é, quanto ele comporta e quanto foi pedido.
+ */
+function validarCapacidade(veiculo: Veiculo, vagasOfertadas: number): void {
+  if (vagasOfertadas > veiculo.capacidadePassageiros) {
+    throw new AppError(
+      'REGRA_NEGOCIO',
+      `O ${veiculo.modelo} de placa ${veiculo.placa} comporta ${veiculo.capacidadePassageiros} ` +
+        `passageiro(s), mas foram oferecidas ${vagasOfertadas} vagas.`,
+      'vagasOfertadas',
+    );
+  }
+}
+
+/**
+ * Carrega a rota exigindo posse (RN-09) e que ela ainda esteja ativa.
+ *
+ * Sem a checagem de `ativa`, uma rota removida continuaria gerando caronas: ela
+ * some da listagem do motorista, mas as caronas dela seguem aparecendo na busca
+ * dos colegas. É o mesmo cuidado que `carregarVeiculoUtilizavel` toma.
+ */
+async function carregarRotaUtilizavel(rotaId: string, motoristaId: string): Promise<Rota> {
+  const rota = await carregarDoMotorista(rotaId, motoristaId);
+
+  if (!rota.ativa) {
+    throw new AppError(
+      'REGRA_NEGOCIO',
+      `A rota "${rota.apelido}" foi removida. Cadastre-a novamente para abrir caronas.`,
+      'rotaId',
+    );
+  }
+
+  return rota;
+}
+
+/**
+ * Carrega o veículo exigindo posse (RN-03) e que ele ainda esteja ativo.
+ *
+ * A checagem de `ativo` é obrigatória: `GET /veiculos/:id` não filtra removidos,
+ * de propósito, para que caronas antigas consigam exibir o carro. Sem esta
+ * checagem daria para publicar carona com um veículo que o motorista já removeu.
+ */
+async function carregarVeiculoUtilizavel(veiculoId: string, motoristaId: string): Promise<Veiculo> {
+  const veiculo = await prisma.veiculo.findUnique({ where: { id: veiculoId } });
+
+  if (!veiculo) {
+    throw new AppError('NAO_ENCONTRADO', 'Veículo não encontrado.');
+  }
+
+  if (veiculo.usuarioId !== motoristaId) {
+    throw new AppError('SEM_PERMISSAO', 'Este veículo pertence a outro funcionário.');
+  }
+
+  if (!veiculo.ativo) {
+    throw new AppError(
+      'REGRA_NEGOCIO',
+      `O veículo de placa ${veiculo.placa} foi removido. Cadastre-o novamente para usá-lo.`,
+      'veiculoId',
+    );
+  }
+
+  return veiculo;
+}
+
+/**
+ * Carrega a carona com tudo que a API precisa exibir.
+ *
+ * Aceita `db` para poder ser chamada de dentro de uma transação. Sem esse
+ * parâmetro, uma chamada feita dentro de `$transaction` usaria o singleton e
+ * rodaria fora da transação — sem a proteção do lock.
+ */
+export async function carregarCarona(
+  caronaId: string,
+  db: ClientePrisma = prisma,
+): Promise<CaronaComResumo> {
+  const carona = await db.carona.findUnique({
+    where: { id: caronaId },
+    include: INCLUDE_RESUMO,
+  });
+
+  if (!carona) {
+    throw new AppError('NAO_ENCONTRADO', 'Carona não encontrada.');
+  }
+
+  return carona;
+}
+
+/** Carrega a carona exigindo que quem pede seja o motorista dono da rota (RN-09). */
+export async function carregarDoDono(
+  caronaId: string,
+  motoristaId: string,
+  db: ClientePrisma = prisma,
+): Promise<CaronaComResumo> {
+  const carona = await carregarCarona(caronaId, db);
+
+  if (carona.rota.motoristaId !== motoristaId) {
+    throw new AppError('SEM_PERMISSAO', 'Esta carona é de outro motorista.');
+  }
+
+  return carona;
+}
+
+/**
+ * Carrega a carona com a linha TRAVADA até o fim da transação.
+ *
+ * É a peça central da RN-02. Qualquer decisão do tipo "ainda cabe mais alguém?"
+ * precisa ser tomada com a linha travada, senão duas requisições leem o mesmo
+ * número de vagas livres e ambas gravam.
+ *
+ * Medido contra o banco, com 4 pessoas disputando 1 vaga ao mesmo tempo:
+ * sem o lock as 4 reservas foram confirmadas; com o lock, exatamente 1.
+ *
+ * Só faz sentido dentro de `prisma.$transaction(async (tx) => ...)` — fora de
+ * uma transação o lock é liberado imediatamente e não protege nada.
+ */
+export async function travarCaronaParaAtualizacao(
+  tx: ClientePrisma,
+  caronaId: string,
+): Promise<CaronaComResumo> {
+  const travadas = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM carona WHERE id = ${caronaId}::uuid FOR UPDATE`;
+
+  if (travadas.length === 0) {
+    throw new AppError('NAO_ENCONTRADO', 'Carona não encontrada.');
+  }
+
+  return carregarCarona(caronaId, tx);
+}
+
+/** Reservas que de fato ocupam vaga. Conte sempre com a carona travada. */
+export async function contarReservasConfirmadas(
+  caronaId: string,
+  db: ClientePrisma = prisma,
+): Promise<number> {
+  return db.reserva.count({ where: { caronaId, status: StatusReserva.CONFIRMADA } });
+}
+
+export async function criar(motoristaId: string, dados: CriarCaronaDTO): Promise<CaronaPublica> {
+  const rota = await carregarRotaUtilizavel(dados.rotaId, motoristaId);
+  const veiculo = await carregarVeiculoUtilizavel(dados.veiculoId, motoristaId);
+
+  validarCapacidade(veiculo, dados.vagasOfertadas);
+
+  // O instante de partida NUNCA vem do cliente: é recomposto a partir do dia
+  // pedido e do horário da rota. É isso que faz o índice único
+  // (rota_id, data_partida) de fato impedir carona duplicada no mesmo dia.
+  const dataPartida = combinarDiaEHorario(dados.data, rota.horarioPartida);
+
+  if (dataPartida.getTime() <= Date.now()) {
+    throw new AppError(
+      'REGRA_NEGOCIO',
+      'Não é possível abrir carona para um horário que já passou.',
+      'data',
+    );
+  }
+
+  // A checagem é por DIA, não pelo instante exato. Comparar o instante deixava
+  // um furo: bastava alterar `rota.horarioPartida` entre uma abertura e outra
+  // para o mesmo dia aceitar uma segunda carona.
+  // Caronas canceladas ficam de fora, senão cancelar bloquearia o dia para sempre.
+  const { inicio, fim } = intervaloDoDia(dados.data);
+  const jaAberta = await prisma.carona.findFirst({
+    where: {
+      rotaId: rota.id,
+      status: { not: StatusCarona.CANCELADA },
+      dataPartida: { gte: inicio, lt: fim },
+    },
+    select: { id: true },
+  });
+
+  if (jaAberta) {
+    throw new AppError(
+      'CONFLITO',
+      `Você já abriu uma carona da rota "${rota.apelido}" neste dia.`,
+      'data',
+    );
+  }
+
+  const carona = await prisma.carona.create({
+    data: {
+      rotaId: rota.id,
+      veiculoId: veiculo.id,
+      dataPartida,
+      vagasOfertadas: dados.vagasOfertadas,
+      observacao: dados.observacao ?? null,
+    },
+    include: INCLUDE_RESUMO,
+  });
+
+  return paraPublica(carona);
+}
+
+/** Caronas em que o usuário é o motorista, de hoje em diante. */
+export async function listarDoMotorista(motoristaId: string): Promise<CaronaPublica[]> {
+  const caronas = await prisma.carona.findMany({
+    where: { rota: { motoristaId }, dataPartida: { gte: inicioDoDiaAtual() } },
+    include: INCLUDE_RESUMO,
+    orderBy: { dataPartida: 'asc' },
+  });
+
+  return caronas.map(paraPublica);
+}
+
+/**
+ * Busca de caronas disponíveis — é a tela que ataca o problema do case:
+ * "colegas do mesmo bairro gastam com transporte enquanto carros circulam vazios".
+ *
+ * As caronas do próprio usuário ficam de fora: a busca existe para achar quem vai
+ * no mesmo caminho, e a RN-04 proíbe reservar vaga na própria carona.
+ */
+export async function buscar(
+  usuarioId: string,
+  filtros: BuscarCaronasDTO,
+): Promise<CaronaPublica[]> {
+  const rota: Prisma.RotaWhereInput = { motoristaId: { not: usuarioId } };
+
+  if (filtros.bairroOrigem) {
+    rota.origemBairro = { contains: filtros.bairroOrigem, mode: 'insensitive' };
+  }
+  if (filtros.bairroDestino) {
+    rota.destinoBairro = { contains: filtros.bairroDestino, mode: 'insensitive' };
+  }
+  if (filtros.sentido) {
+    rota.sentido = filtros.sentido;
+  }
+
+  const caronas = await prisma.carona.findMany({
+    where: {
+      status: StatusCarona.ABERTA,
+      dataPartida: janelaDeBusca(filtros.data),
+      rota,
+    },
+    include: INCLUDE_RESUMO,
+    orderBy: { dataPartida: 'asc' },
+  });
+
+  return caronas.map(paraPublica);
+}
+
+export async function buscarPorId(caronaId: string): Promise<CaronaDetalhada> {
+  const carona = await prisma.carona.findUnique({
+    where: { id: caronaId },
+    include: INCLUDE_DETALHE,
+  });
+
+  if (!carona) {
+    throw new AppError('NAO_ENCONTRADO', 'Carona não encontrada.');
+  }
+
+  return paraDetalhada(carona);
+}
+
+export async function atualizar(
+  caronaId: string,
+  motoristaId: string,
+  dados: AtualizarCaronaDTO,
+): Promise<CaronaPublica> {
+  const carona = await carregarDoDono(caronaId, motoristaId);
+
+  if (!STATUS_EDITAVEIS.includes(carona.status)) {
+    throw new AppError(
+      'REGRA_NEGOCIO',
+      `Carona ${carona.status.toLowerCase().replace('_', ' ')} não pode mais ser alterada.`,
+    );
+  }
+
+  if (dados.vagasOfertadas !== undefined) {
+    validarCapacidade(carona.veiculo, dados.vagasOfertadas);
+
+    const confirmadas = carona._count.reservas;
+    if (dados.vagasOfertadas < confirmadas) {
+      throw new AppError(
+        'REGRA_NEGOCIO',
+        `Esta carona já tem ${confirmadas} reserva(s) confirmada(s). ` +
+          `Não é possível reduzir para ${dados.vagasOfertadas} vaga(s) sem cancelá-las antes.`,
+        'vagasOfertadas',
+      );
+    }
+  }
+
+  const atualizada = await prisma.carona.update({
+    where: { id: caronaId },
+    data: {
+      ...(dados.vagasOfertadas !== undefined && { vagasOfertadas: dados.vagasOfertadas }),
+      ...(dados.observacao !== undefined && { observacao: dados.observacao }),
+    },
+    include: INCLUDE_RESUMO,
+  });
+
+  return paraPublica(atualizada);
+}
+
+/**
+ * RN-08 — cancelar a carona cancela em cascata as reservas confirmadas.
+ *
+ * Em transação: deixar reserva confirmada apontando para carona cancelada faria
+ * o passageiro acreditar que tem vaga numa viagem que não vai acontecer.
+ */
+export async function cancelar(caronaId: string, motoristaId: string): Promise<CaronaPublica> {
+  const carona = await carregarDoDono(caronaId, motoristaId);
+
+  if (carona.status === StatusCarona.CANCELADA) {
+    throw new AppError('CONFLITO', 'Esta carona já está cancelada.');
+  }
+
+  if (carona.status === StatusCarona.CONCLUIDA) {
+    throw new AppError('REGRA_NEGOCIO', 'Uma carona já concluída não pode ser cancelada.');
+  }
+
+  // Cancelar uma viagem que já aconteceu não é só inócuo: o cancelamento em
+  // cascata marcaria as reservas como CANCELADA e apagaria o registro de quem
+  // de fato viajou — que é a base da pontuação (N2) e da avaliação (N3).
+  // Para esses casos o caminho é REALIZADA / NAO_COMPARECEU, não CANCELADA.
+  if (carona.dataPartida.getTime() <= Date.now()) {
+    throw new AppError(
+      'REGRA_NEGOCIO',
+      `Esta carona partiu em ${formatarParaUsuario(carona.dataPartida)} e não pode mais ser ` +
+        `cancelada. Uma viagem que já aconteceu precisa ter as reservas encerradas como ` +
+        `realizadas ou não comparecidas.`,
+    );
+  }
+
+  const [, atualizada] = await prisma.$transaction([
+    prisma.reserva.updateMany({
+      where: { caronaId, status: StatusReserva.CONFIRMADA },
+      data: { status: StatusReserva.CANCELADA, canceladoEm: new Date() },
+    }),
+    prisma.carona.update({
+      where: { id: caronaId },
+      data: { status: StatusCarona.CANCELADA },
+      include: INCLUDE_RESUMO,
+    }),
+  ]);
+
+  return paraPublica(atualizada);
+}
+
+/** Data e hora no fuso da empresa, para aparecer em mensagem de erro. */
+function formatarParaUsuario(instante: Date): string {
+  return instante.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
+}
+
+/** Sem filtro de data, tudo daqui para frente. Com filtro, apenas aquele dia. */
+function janelaDeBusca(data: string | undefined): Prisma.DateTimeFilter {
+  const agora = new Date();
+
+  if (!data) {
+    return { gte: agora };
+  }
+
+  const { inicio, fim } = intervaloDoDia(data);
+  return { gte: inicio > agora ? inicio : agora, lt: fim };
+}

@@ -1,3 +1,4 @@
+import { StatusCarona } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 import { prisma } from '../../src/config/prisma';
 import { traduzirErroDoBanco } from '../../src/shared/errors/traduzir-erro-do-banco';
@@ -107,11 +108,14 @@ describe('constraints de sanidade do domínio', () => {
   });
 
   /**
-   * Contraparte da armadilha 3.1: a constraint compara o timestamp inteiro.
-   * É `combinarDiaEHorario` que faz duas requisições do mesmo dia colidirem —
-   * por isso `data_partida` nunca pode vir crua do cliente.
+   * O índice `carona_unica_por_rota_e_dia` compara o DIA-CALENDÁRIO no fuso da
+   * empresa, não o instante.
+   *
+   * A versão anterior comparava o timestamp inteiro, e deixava dois furos: um
+   * milissegundo de diferença passava, e alterar `rota.horario_partida` entre
+   * duas aberturas também. Agora a garantia vale independentemente da hora.
    */
-  it('a proteção depende de combinarDiaEHorario, não da constraint sozinha', async () => {
+  it('bloqueia a mesma rota no mesmo dia mesmo com instantes diferentes', async () => {
     const motorista = await criarUsuario();
     const veiculo = await criarVeiculo(motorista.id);
     const rota = await criarRota(motorista.id);
@@ -122,25 +126,69 @@ describe('constraints de sanidade do domínio', () => {
       data: { rotaId: rota.id, veiculoId: veiculo.id, dataPartida: instante, vagasOfertadas: 2 },
     });
 
-    // Um milissegundo de diferença passa pelo índice único.
-    const quaseIgual = new Date(instante.getTime() + 1);
-    const gemea = await prisma.carona.create({
-      data: { rotaId: rota.id, veiculoId: veiculo.id, dataPartida: quaseIgual, vagasOfertadas: 2 },
-    });
-
-    expect(gemea.id).toBeDefined();
-
-    // Já pelo helper, o mesmo dia sempre gera o mesmo instante — e aí colide.
+    // Um milissegundo depois: mesmo dia.
     await expect(
       prisma.carona.create({
         data: {
           rotaId: rota.id,
           veiculoId: veiculo.id,
-          dataPartida: combinarDiaEHorario(dia, rota.horarioPartida),
+          dataPartida: new Date(instante.getTime() + 1),
           vagasOfertadas: 2,
         },
       }),
     ).rejects.toThrow();
+
+    // Seis horas depois: ainda o mesmo dia.
+    await expect(
+      prisma.carona.create({
+        data: {
+          rotaId: rota.id,
+          veiculoId: veiculo.id,
+          dataPartida: new Date(instante.getTime() + 6 * 60 * 60 * 1000),
+          vagasOfertadas: 2,
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('permite a mesma rota em dias diferentes', async () => {
+    const motorista = await criarUsuario();
+    const veiculo = await criarVeiculo(motorista.id);
+    const rota = await criarRota(motorista.id);
+
+    for (const daqui of [3, 4, 5]) {
+      await prisma.carona.create({
+        data: {
+          rotaId: rota.id,
+          veiculoId: veiculo.id,
+          dataPartida: combinarDiaEHorario(emDias(daqui), rota.horarioPartida),
+          vagasOfertadas: 2,
+        },
+      });
+    }
+
+    expect(await prisma.carona.count({ where: { rotaId: rota.id } })).toBe(3);
+  });
+
+  it('o índice ignora canceladas, para o dia não ficar bloqueado para sempre', async () => {
+    const motorista = await criarUsuario();
+    const veiculo = await criarVeiculo(motorista.id);
+    const rota = await criarRota(motorista.id);
+    const instante = combinarDiaEHorario(emDias(3), rota.horarioPartida);
+
+    const primeira = await prisma.carona.create({
+      data: { rotaId: rota.id, veiculoId: veiculo.id, dataPartida: instante, vagasOfertadas: 2 },
+    });
+    await prisma.carona.update({
+      where: { id: primeira.id },
+      data: { status: StatusCarona.CANCELADA },
+    });
+
+    const segunda = await prisma.carona.create({
+      data: { rotaId: rota.id, veiculoId: veiculo.id, dataPartida: instante, vagasOfertadas: 3 },
+    });
+
+    expect(segunda.id).not.toBe(primeira.id);
   });
 });
 

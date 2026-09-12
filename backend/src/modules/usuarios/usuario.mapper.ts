@@ -19,6 +19,28 @@ export interface UsuarioPublico {
  * Fica em `usuarios` e nao em `auth` porque Usuario e a entidade deste modulo -
  * caronas tambem vao precisar disto para exibir o motorista no D3.
  */
+/** Versão reduzida, para aparecer embutida dentro de outro recurso. */
+export interface UsuarioResumo {
+  id: string;
+  nome: string;
+  bairro: string;
+  telefone: string | null;
+}
+
+/**
+ * Usado onde um usuário aparece como parte de outro recurso — o motorista de uma
+ * carona, por exemplo. Expõe menos que `paraPublico`: matrícula e e-mail são
+ * dados funcionais e não precisam circular na listagem de caronas da empresa.
+ */
+export function paraResumo(usuario: Pick<Usuario, 'id' | 'nome' | 'bairro' | 'telefone'>): UsuarioResumo {
+  return {
+    id: usuario.id,
+    nome: usuario.nome,
+    bairro: usuario.bairro,
+    telefone: usuario.telefone,
+  };
+}
+
 export function paraPublico(usuario: Usuario): UsuarioPublico {
   return {
     id: usuario.id,

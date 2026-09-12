@@ -66,6 +66,11 @@ export function emDias(dias: number): Date {
   return data;
 }
 
+/** O mesmo deslocamento, no formato "AAAA-MM-DD" que a API de caronas recebe. */
+export function diaEmTexto(dias: number): string {
+  return emDias(dias).toISOString().slice(0, 10);
+}
+
 export async function criarCarona(
   rota: Rota,
   veiculoId: string,

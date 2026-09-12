@@ -5,6 +5,8 @@ import { env } from './config/env';
 import { prisma } from './config/prisma';
 import { openapi } from './docs/openapi';
 import { authRoutes } from './modules/auth/auth.routes';
+import { caronaRoutes } from './modules/caronas/carona.routes';
+import { rotaRoutes } from './modules/rotas/rota.routes';
 import { usuarioRoutes } from './modules/usuarios/usuario.routes';
 import { veiculoRoutes } from './modules/veiculos/veiculo.routes';
 import { AppError } from './shared/errors/app-error';
@@ -39,9 +41,10 @@ app.get('/openapi.json', (_req, res) => {
 app.use('/auth', authRoutes);
 app.use('/usuarios', usuarioRoutes);
 app.use('/veiculos', veiculoRoutes);
+app.use('/rotas', rotaRoutes);
+app.use('/caronas', caronaRoutes);
 
-// Caronas e reservas entram no D3/D4:
-// app.use('/caronas', caronaRoutes);
+// Reservas entram no D4:
 // app.use('/reservas', reservaRoutes);
 
 // Rota inexistente cai no mesmo envelope de erro do resto da API, em vez do

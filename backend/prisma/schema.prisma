@@ -140,7 +140,9 @@ model Carona {
   veiculo  Veiculo   @relation(fields: [veiculoId], references: [id])
   reservas Reserva[]
 
-  @@unique([rotaId, dataPartida], name: "carona_rota_data_unica")
+  /// A unicidade de "uma carona por rota por dia" NAO cabe aqui: ela precisa
+  /// ignorar as canceladas, e o Prisma nao expressa indice unico parcial.
+  /// Vive em SQL na migration `carona_unica_por_dia`.
   @@index([dataPartida, status])
   /// O Postgres nao cria indice automatico para chave estrangeira (diferente do
   /// MySQL). Sem isto, toda checagem de "este veiculo tem carona?" vira scan.
