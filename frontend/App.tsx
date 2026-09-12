@@ -1,0 +1,1437 @@
+import { useEffect, useState } from "react";
+
+import {
+  buscarCarona,
+  criarReserva,
+  getMeuPerfil,
+  getUsuarioSalvo,
+  isAuthenticated,
+  listarCaronas,
+  listarMinhasCaronas,
+  listarMinhasReservas,
+  listarRotas,
+  listarVeiculos,
+  login,
+  logoutUsuario,
+} from "./api";
+
+import type {
+  Carona,
+  Reserva,
+  Rota,
+  Usuario,
+  Veiculo,
+} from "./types";
+
+type Tela =
+  | "dashboard"
+  | "buscar"
+  | "minhas-caronas"
+  | "reservas"
+  | "veiculos"
+  | "rotas"
+  | "perfil";
+
+function App() {
+  const [autenticado, setAutenticado] = useState(isAuthenticated());
+
+  const [usuario, setUsuario] = useState<Usuario | null>(
+    getUsuarioSalvo()
+  );
+
+  const [tela, setTela] = useState<Tela>("dashboard");
+
+  function handleLogin(usuarioLogado: Usuario) {
+    setUsuario(usuarioLogado);
+    setAutenticado(true);
+    setTela("dashboard");
+  }
+
+  function handleLogout() {
+    logoutUsuario();
+    setUsuario(null);
+    setAutenticado(false);
+  }
+
+  if (!autenticado) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+
+  return (
+    <div className="app">
+      <Sidebar
+        tela={tela}
+        usuario={usuario}
+        onNavigate={setTela}
+        onLogout={handleLogout}
+      />
+
+      <main className="main-content">
+        <Header usuario={usuario} />
+
+        {tela === "dashboard" && (
+          <Dashboard
+            usuario={usuario}
+            onNavigate={setTela}
+          />
+        )}
+
+        {tela === "buscar" && <BuscarCaronas />}
+
+        {tela === "minhas-caronas" && (
+          <MinhasCaronas />
+        )}
+
+        {tela === "reservas" && (
+          <MinhasReservas />
+        )}
+
+        {tela === "veiculos" && (
+          <MeusVeiculos />
+        )}
+
+        {tela === "rotas" && (
+          <MinhasRotas />
+        )}
+
+        {tela === "perfil" && (
+          <MeuPerfil
+            usuario={usuario}
+            onUpdate={setUsuario}
+          />
+        )}
+      </main>
+    </div>
+  );
+}
+
+// ==========================================
+// LOGIN
+// ==========================================
+
+function LoginScreen({
+  onLogin,
+}: {
+  onLogin: (usuario: Usuario) => void;
+}) {
+  const [email, setEmail] = useState(
+    "willian@viacar.com.br"
+  );
+
+  const [senha, setSenha] = useState("viacar123");
+
+  const [loading, setLoading] = useState(false);
+
+  const [erro, setErro] = useState("");
+
+  async function handleSubmit(
+    event: React.FormEvent
+  ) {
+    event.preventDefault();
+
+    setLoading(true);
+    setErro("");
+
+    try {
+      const response = await login(email, senha);
+
+      onLogin(response.usuario);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível realizar o login."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <div className="brand">
+          <div className="brand-icon">V</div>
+
+          <div>
+            <h1>ViaCar</h1>
+            <span>Carona corporativa</span>
+          </div>
+        </div>
+
+        <div className="login-header">
+          <h2>Bem-vindo de volta</h2>
+
+          <p>
+            Entre para encontrar ou oferecer uma carona.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <label>
+            E-mail
+
+            <input
+              type="email"
+              value={email}
+              onChange={(event) =>
+                setEmail(event.target.value)
+              }
+              placeholder="seu@email.com"
+              required
+            />
+          </label>
+
+          <label>
+            Senha
+
+            <input
+              type="password"
+              value={senha}
+              onChange={(event) =>
+                setSenha(event.target.value)
+              }
+              placeholder="Sua senha"
+              required
+            />
+          </label>
+
+          {erro && (
+            <div className="error-message">
+              {erro}
+            </div>
+          )}
+
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
+
+        <div className="login-demo">
+          <strong>Usuário de demonstração</strong>
+
+          <span>
+            willian@viacar.com.br
+          </span>
+
+          <span>Senha: viacar123</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// SIDEBAR
+// ==========================================
+
+function Sidebar({
+  tela,
+  usuario,
+  onNavigate,
+  onLogout,
+}: {
+  tela: Tela;
+  usuario: Usuario | null;
+  onNavigate: (tela: Tela) => void;
+  onLogout: () => void;
+}) {
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-brand">
+        <div className="brand-icon">V</div>
+
+        <div>
+          <strong>ViaCar</strong>
+          <span>Corporativo</span>
+        </div>
+      </div>
+
+      <nav>
+        <button
+          className={
+            tela === "dashboard"
+              ? "nav-item active"
+              : "nav-item"
+          }
+          onClick={() => onNavigate("dashboard")}
+        >
+          <span>⌂</span>
+          Início
+        </button>
+
+        <button
+          className={
+            tela === "buscar"
+              ? "nav-item active"
+              : "nav-item"
+          }
+          onClick={() => onNavigate("buscar")}
+        >
+          <span>⌕</span>
+          Buscar carona
+        </button>
+
+        <button
+          className={
+            tela === "minhas-caronas"
+              ? "nav-item active"
+              : "nav-item"
+          }
+          onClick={() =>
+            onNavigate("minhas-caronas")
+          }
+        >
+          <span>🚗</span>
+          Minhas caronas
+        </button>
+
+        <button
+          className={
+            tela === "reservas"
+              ? "nav-item active"
+              : "nav-item"
+          }
+          onClick={() => onNavigate("reservas")}
+        >
+          <span>🎫</span>
+          Minhas reservas
+        </button>
+
+        <div className="nav-section">
+          <span>GERENCIAMENTO</span>
+        </div>
+
+        <button
+          className={
+            tela === "veiculos"
+              ? "nav-item active"
+              : "nav-item"
+          }
+          onClick={() => onNavigate("veiculos")}
+        >
+          <span>🚙</span>
+          Meus veículos
+        </button>
+
+        <button
+          className={
+            tela === "rotas"
+              ? "nav-item active"
+              : "nav-item"
+          }
+          onClick={() => onNavigate("rotas")}
+        >
+          <span>🛣️</span>
+          Minhas rotas
+        </button>
+
+        <button
+          className={
+            tela === "perfil"
+              ? "nav-item active"
+              : "nav-item"
+          }
+          onClick={() => onNavigate("perfil")}
+        >
+          <span>👤</span>
+          Meu perfil
+        </button>
+      </nav>
+
+      <div className="sidebar-footer">
+        <div className="user-mini">
+          <div className="avatar">
+            {usuario?.nome
+              ?.charAt(0)
+              .toUpperCase() || "U"}
+          </div>
+
+          <div>
+            <strong>
+              {usuario?.nome || "Usuário"}
+            </strong>
+
+            <span>
+              {usuario?.bairro || ""}
+            </span>
+          </div>
+        </div>
+
+        <button
+          className="logout-button"
+          onClick={onLogout}
+        >
+          Sair
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// ==========================================
+// HEADER
+// ==========================================
+
+function Header({
+  usuario,
+}: {
+  usuario: Usuario | null;
+}) {
+  return (
+    <header className="topbar">
+      <div>
+        <span className="topbar-label">
+          VIAJAR JUNTOS
+        </span>
+
+        <h1>
+          Olá, {usuario?.nome?.split(" ")[0] || "usuário"}!
+        </h1>
+      </div>
+
+      <div className="topbar-user">
+        <div className="avatar">
+          {usuario?.nome
+            ?.charAt(0)
+            .toUpperCase() || "U"}
+        </div>
+
+        <div>
+          <strong>{usuario?.nome}</strong>
+          <span>{usuario?.email}</span>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+// ==========================================
+// DASHBOARD
+// ==========================================
+
+function Dashboard({
+  usuario,
+  onNavigate,
+}: {
+  usuario: Usuario | null;
+  onNavigate: (tela: Tela) => void;
+}) {
+  const [catches, setCatches] = useState<Carona[]>([]);
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await listarCaronas();
+
+        setCatches(data.slice(0, 3));
+      } catch {
+        setCatches([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  return (
+    <div>
+      <section className="hero">
+        <div>
+          <span className="hero-tag">
+            CARONA CORPORATIVA
+          </span>
+
+          <h2>
+            Encontre uma carona para o trabalho.
+          </h2>
+
+          <p>
+            Economize, compartilhe o caminho e
+            conecte-se com colegas da empresa.
+          </p>
+
+          <button
+            className="primary-button"
+            onClick={() => onNavigate("buscar")}
+          >
+            Encontrar uma carona
+          </button>
+        </div>
+
+        <div className="hero-illustration">
+          🚗
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section-heading">
+          <div>
+            <span className="section-kicker">
+              PARA VOCÊ
+            </span>
+
+            <h2>
+              Próximas caronas
+            </h2>
+          </div>
+
+          <button
+            className="text-button"
+            onClick={() => onNavigate("buscar")}
+          >
+            Ver todas →
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="loading">
+            Carregando caronas...
+          </div>
+        ) : catches.length === 0 ? (
+          <EmptyState
+            title="Nenhuma carona encontrada"
+            description="Ainda não existem caronas disponíveis."
+          />
+        ) : (
+          <div className="ride-grid">
+            {catches.map((carona) => (
+              <CaronaCard
+                key={carona.id}
+                carona={carona}
+                onReserve={() => onNavigate("buscar")}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="info-grid">
+        <div className="info-card">
+          <span>📍</span>
+          <div>
+            <strong>Seu bairro</strong>
+            <p>{usuario?.bairro || "Não informado"}</p>
+          </div>
+        </div>
+
+        <div className="info-card">
+          <span>🤝</span>
+          <div>
+            <strong>Compartilhe</strong>
+            <p>
+              Divida custos e ajude seus colegas.
+            </p>
+          </div>
+        </div>
+
+        <div className="info-card">
+          <span>🌱</span>
+          <div>
+            <strong>Mais sustentável</strong>
+            <p>
+              Menos carros, menos impacto.
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ==========================================
+// BUSCAR CARONAS
+// ==========================================
+
+function BuscarCaronas() {
+  const [bairro, setBairro] = useState("");
+
+  const [data, setData] = useState("");
+
+  const [sentido, setSentido] = useState<
+    "" | "IDA" | "VOLTA"
+  >("");
+
+  const [caronas, setCaronas] = useState<Carona[]>([]);
+
+  const [loading, setLoading] = useState(false);
+
+  const [erro, setErro] = useState("");
+
+  const [caronaSelecionada, setCaronaSelecionada] =
+    useState<Carona | null>(null);
+
+  async function buscar() {
+    setLoading(true);
+    setErro("");
+
+    try {
+      const resultado = await listarCaronas({
+        bairroOrigem: bairro || undefined,
+        data: data || undefined,
+        sentido: sentido || undefined,
+      });
+
+      setCaronas(resultado);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível buscar caronas."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    buscar();
+  }, []);
+
+  return (
+    <div>
+      <PageTitle
+        kicker="ENCONTRE SUA CARONA"
+        title="Buscar caronas"
+        description="Encontre colegas que fazem um trajeto parecido com o seu."
+      />
+
+      <div className="search-panel">
+        <label>
+          Bairro de origem
+
+          <input
+            value={bairro}
+            onChange={(event) =>
+              setBairro(event.target.value)
+            }
+            placeholder="Ex.: Costa e Silva"
+          />
+        </label>
+
+        <label>
+          Data
+
+          <input
+            type="date"
+            value={data}
+            onChange={(event) =>
+              setData(event.target.value)
+            }
+          />
+        </label>
+
+        <label>
+          Sentido
+
+          <select
+            value={sentido}
+            onChange={(event) =>
+              setSentido(
+                event.target.value as
+                  | ""
+                  | "IDA"
+                  | "VOLTA"
+              )
+            }
+          >
+            <option value="">Todos</option>
+            <option value="IDA">Ida</option>
+            <option value="VOLTA">Volta</option>
+          </select>
+        </label>
+
+        <button
+          className="primary-button search-button"
+          onClick={buscar}
+        >
+          Buscar
+        </button>
+      </div>
+
+      {erro && (
+        <div className="error-message">
+          {erro}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="loading">
+          Buscando caronas...
+        </div>
+      ) : caronas.length === 0 ? (
+        <EmptyState
+          title="Nenhuma carona encontrada"
+          description="Tente alterar os filtros de busca."
+        />
+      ) : (
+        <div className="ride-list">
+          {caronas.map((carona) => (
+            <CaronaCard
+              key={carona.id}
+              carona={carona}
+              onReserve={() =>
+                setCaronaSelecionada(carona)
+              }
+            />
+          ))}
+        </div>
+      )}
+
+      {caronaSelecionada && (
+        <ReservaModal
+          carona={caronaSelecionada}
+          onClose={() =>
+            setCaronaSelecionada(null)
+          }
+          onSuccess={() => {
+            setCaronaSelecionada(null);
+            buscar();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// CARD DE CARONA
+// ==========================================
+
+function CaronaCard({
+  carona,
+  onReserve,
+}: {
+  carona: Carona;
+  onReserve: () => void;
+}) {
+  const data = new Date(
+    carona.dataPartida
+  ).toLocaleDateString("pt-BR");
+
+  const podeReservar =
+    carona.status === "ABERTA" &&
+    carona.vagasDisponiveis > 0;
+
+  return (
+    <article className="ride-card">
+      <div className="ride-card-top">
+        <div className="date-badge">
+          <strong>
+            {new Date(
+              carona.dataPartida
+            ).getDate()}
+          </strong>
+
+          <span>
+            {new Date(
+              carona.dataPartida
+            ).toLocaleDateString(
+              "pt-BR",
+              { month: "short" }
+            )}
+          </span>
+        </div>
+
+        <div>
+          <span className="status-badge">
+            {getStatusLabel(carona.status)}
+          </span>
+
+          <h3>
+            {carona.rota.apelido ||
+              `${carona.rota.origemBairro} → ${carona.rota.destinoBairro}`}
+          </h3>
+
+          <span className="ride-date">
+            {data} ·{" "}
+            {carona.rota.horarioPartida}
+          </span>
+        </div>
+      </div>
+
+      <div className="route-line">
+        <div>
+          <span className="route-dot" />
+          <strong>
+            {carona.rota.origemBairro}
+          </strong>
+          <small>
+            {carona.rota.origemEndereco}
+          </small>
+        </div>
+
+        <div className="route-connector" />
+
+        <div>
+          <span className="route-dot destination" />
+          <strong>
+            {carona.rota.destinoBairro}
+          </strong>
+          <small>
+            {carona.rota.destinoEndereco}
+          </small>
+        </div>
+      </div>
+
+      <div className="ride-details">
+        <div>
+          <span>👤</span>
+          <div>
+            <small>Motorista</small>
+            <strong>
+              {carona.motorista.nome}
+            </strong>
+          </div>
+        </div>
+
+        <div>
+          <span>🚙</span>
+          <div>
+            <small>Veículo</small>
+            <strong>
+              {carona.veiculo.modelo}
+            </strong>
+          </div>
+        </div>
+
+        <div>
+          <span>🪑</span>
+          <div>
+            <small>Vagas</small>
+            <strong>
+              {carona.vagasDisponiveis} disponíveis
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      {carona.observacao && (
+        <div className="ride-observation">
+          <strong>Observação:</strong>{" "}
+          {carona.observacao}
+        </div>
+      )}
+
+      <div className="ride-footer">
+        <span>
+          {carona.veiculo.cor} ·{" "}
+          {carona.veiculo.placa}
+        </span>
+
+        <button
+          className="primary-button small"
+          disabled={!podeReservar}
+          onClick={onReserve}
+        >
+          {podeReservar
+            ? "Reservar vaga"
+            : getStatusLabel(carona.status)}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// ==========================================
+// MODAL RESERVA
+// ==========================================
+
+function ReservaModal({
+  carona,
+  onClose,
+  onSuccess,
+}: {
+  carona: Carona;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [pontoEmbarque, setPontoEmbarque] =
+    useState("");
+
+  const [loading, setLoading] = useState(false);
+
+  const [erro, setErro] = useState("");
+
+  async function reservar() {
+    setLoading(true);
+    setErro("");
+
+    try {
+      await criarReserva(
+        carona.id,
+        pontoEmbarque || undefined
+      );
+
+      onSuccess();
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível realizar a reserva."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal">
+        <button
+          className="modal-close"
+          onClick={onClose}
+        >
+          ×
+        </button>
+
+        <span className="section-kicker">
+          RESERVA
+        </span>
+
+        <h2>
+          Confirmar sua vaga?
+        </h2>
+
+        <p>
+          Você vai reservar uma vaga com{" "}
+          <strong>
+            {carona.motorista.nome}
+          </strong>.
+        </p>
+
+        <div className="modal-summary">
+          <strong>
+            {carona.rota.apelido ||
+              `${carona.rota.origemBairro} → ${carona.rota.destinoBairro}`}
+          </strong>
+
+          <span>
+            {new Date(
+              carona.dataPartida
+            ).toLocaleDateString("pt-BR")}{" "}
+            às{" "}
+            {carona.rota.horarioPartida}
+          </span>
+        </div>
+
+        <label>
+          Ponto de embarque
+
+          <input
+            value={pontoEmbarque}
+            onChange={(event) =>
+              setPontoEmbarque(event.target.value)
+            }
+            placeholder="Opcional"
+          />
+        </label>
+
+        {erro && (
+          <div className="error-message">
+            {erro}
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <button
+            className="secondary-button"
+            onClick={onClose}
+          >
+            Cancelar
+          </button>
+
+          <button
+            className="primary-button"
+            onClick={reservar}
+            disabled={loading}
+          >
+            {loading
+              ? "Reservando..."
+              : "Confirmar reserva"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// MINHAS CARONAS
+// ==========================================
+
+function MinhasCaronas() {
+  const [caronas, setCaronas] = useState<Carona[]>([]);
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setCaronas(
+          await listarMinhasCaronas()
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  return (
+    <div>
+      <PageTitle
+        kicker="MOTORISTA"
+        title="Minhas caronas"
+        description="Acompanhe as caronas que você oferece."
+      />
+
+      {loading ? (
+        <div className="loading">
+          Carregando...
+        </div>
+      ) : caronas.length === 0 ? (
+        <EmptyState
+          title="Você ainda não oferece caronas"
+          description="Crie uma rota e disponibilize uma carona."
+        />
+      ) : (
+        <div className="ride-list">
+          {caronas.map((carona) => (
+            <CaronaCard
+              key={carona.id}
+              carona={carona}
+              onReserve={() => {}}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// RESERVAS
+// ==========================================
+
+function MinhasReservas() {
+  const [reservas, setReservas] =
+    useState<Reserva[]>([]);
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setReservas(
+          await listarMinhasReservas()
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  return (
+    <div>
+      <PageTitle
+        kicker="PASSAGEIRO"
+        title="Minhas reservas"
+        description="Acompanhe suas reservas de carona."
+      />
+
+      {loading ? (
+        <div className="loading">
+          Carregando reservas...
+        </div>
+      ) : reservas.length === 0 ? (
+        <EmptyState
+          title="Nenhuma reserva"
+          description="Quando você reservar uma carona, ela aparecerá aqui."
+        />
+      ) : (
+        <div className="reservation-list">
+          {reservas.map((reserva) => (
+            <div
+              className="reservation-card"
+              key={reserva.id}
+            >
+              <div>
+                <span className="status-badge">
+                  {getStatusReservaLabel(
+                    reserva.status
+                  )}
+                </span>
+
+                <h3>
+                  {reserva.carona.rota.origemBairro}
+                  {" → "}
+                  Destino
+                </h3>
+
+                <p>
+                  Motorista:{" "}
+                  {reserva.carona.motorista.nome}
+                </p>
+
+                {reserva.pontoEmbarque && (
+                  <p>
+                    Embarque:{" "}
+                    {reserva.pontoEmbarque}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// VEÍCULOS
+// ==========================================
+
+function MeusVeiculos() {
+  const [veiculos, setVeiculos] =
+    useState<Veiculo[]>([]);
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setVeiculos(
+          await listarVeiculos()
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  return (
+    <div>
+      <PageTitle
+        kicker="MOTORISTA"
+        title="Meus veículos"
+        description="Gerencie os veículos que você utiliza para oferecer caronas."
+      />
+
+      {loading ? (
+        <div className="loading">
+          Carregando veículos...
+        </div>
+      ) : veiculos.length === 0 ? (
+        <EmptyState
+          title="Nenhum veículo cadastrado"
+          description="Cadastre um veículo para começar a oferecer caronas."
+        />
+      ) : (
+        <div className="vehicle-grid">
+          {veiculos.map((veiculo) => (
+            <div
+              className="vehicle-card"
+              key={veiculo.id}
+            >
+              <div className="vehicle-icon">
+                🚙
+              </div>
+
+              <div>
+                <span className="section-kicker">
+                  VEÍCULO
+                </span>
+
+                <h3>{veiculo.modelo}</h3>
+
+                <p>
+                  {veiculo.cor} ·{" "}
+                  {veiculo.placa}
+                </p>
+
+                <span>
+                  {veiculo.capacidadePassageiros}{" "}
+                  passageiros
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// ROTAS
+// ==========================================
+
+function MinhasRotas() {
+  const [rotas, setRotas] =
+    useState<Rota[]>([]);
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setRotas(await listarRotas());
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  return (
+    <div>
+      <PageTitle
+        kicker="MOTORISTA"
+        title="Minhas rotas"
+        description="Gerencie os trajetos que você costuma realizar."
+      />
+
+      {loading ? (
+        <div className="loading">
+          Carregando rotas...
+        </div>
+      ) : rotas.length === 0 ? (
+        <EmptyState
+          title="Nenhuma rota cadastrada"
+          description="Cadastre seu trajeto para começar."
+        />
+      ) : (
+        <div className="route-grid">
+          {rotas.map((rota) => (
+            <div
+              className="route-card"
+              key={rota.id}
+            >
+              <span className="section-kicker">
+                {rota.sentido}
+              </span>
+
+              <h3>
+                {rota.apelido ||
+                  `${rota.origemBairro} → ${rota.destinoBairro}`}
+              </h3>
+
+              <p>
+                {rota.origemEndereco}
+              </p>
+
+              <span>↓</span>
+
+              <p>
+                {rota.destinoEndereco}
+              </p>
+
+              <div className="route-meta">
+                <strong>
+                  🕐 {rota.horarioPartida}
+                </strong>
+
+                <span>
+                  {rota.diasSemana?.join(", ") ||
+                    "Dias não informados"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// PERFIL
+// ==========================================
+
+function MeuPerfil({
+  usuario,
+  onUpdate,
+}: {
+  usuario: Usuario | null;
+  onUpdate: (usuario: Usuario) => void;
+}) {
+  const [perfil, setPerfil] =
+    useState<Usuario | null>(usuario);
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await getMeuPerfil();
+
+        setPerfil(data);
+        onUpdate(data);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="loading">
+        Carregando perfil...
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <PageTitle
+        kicker="CONTA"
+        title="Meu perfil"
+        description="Seus dados no ViaCar."
+      />
+
+      <div className="profile-card">
+        <div className="profile-avatar">
+          {perfil?.nome
+            ?.charAt(0)
+            .toUpperCase()}
+        </div>
+
+        <h2>{perfil?.nome}</h2>
+
+        <p>{perfil?.email}</p>
+
+        <div className="profile-info">
+          <div>
+            <small>Matrícula</small>
+            <strong>
+              {perfil?.matricula}
+            </strong>
+          </div>
+
+          <div>
+            <small>Bairro</small>
+            <strong>
+              {perfil?.bairro}
+            </strong>
+          </div>
+
+          <div>
+            <small>Telefone</small>
+            <strong>
+              {perfil?.telefone ||
+                "Não informado"}
+            </strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// COMPONENTES AUXILIARES
+// ==========================================
+
+function PageTitle({
+  kicker,
+  title,
+  description,
+}: {
+  kicker: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="page-title">
+      <span className="section-kicker">
+        {kicker}
+      </span>
+
+      <h2>{title}</h2>
+
+      <p>{description}</p>
+    </div>
+  );
+}
+
+function EmptyState({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="empty-state">
+      <div className="empty-icon">🚗</div>
+
+      <h3>{title}</h3>
+
+      <p>{description}</p>
+    </div>
+  );
+}
+
+function getStatusLabel(
+  status: Carona["status"]
+): string {
+  switch (status) {
+    case "ABERTA":
+      return "Vagas abertas";
+
+    case "LOTADA":
+      return "Lotada";
+
+    case "EM_ANDAMENTO":
+      return "A caminho";
+
+    case "CONCLUIDA":
+      return "Concluída";
+
+    case "CANCELADA":
+      return "Cancelada";
+
+    default:
+      return status;
+  }
+}
+
+function getStatusReservaLabel(
+  status: Reserva["status"]
+): string {
+  switch (status) {
+    case "CONFIRMADA":
+      return "Confirmada";
+
+    case "CANCELADA":
+      return "Cancelada";
+
+    case "REALIZADA":
+      return "Realizada";
+
+    case "NAO_COMPARECEU":
+      return "Não compareceu";
+
+    default:
+      return status;
+  }
+}
+
+export default App;
