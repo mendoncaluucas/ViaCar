@@ -639,7 +639,6 @@ function Dashboard({
   onNavigate: (tela: Tela) => void;
 }) {
   const [catches, setCatches] = useState<Carona[]>([]);
-
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -647,7 +646,7 @@ function Dashboard({
       try {
         const data = await listarCaronas();
 
-        setCatches(data.slice(0, 3));
+        setCatches(data);
       } catch {
         setCatches([]);
       } finally {
@@ -658,41 +657,215 @@ function Dashboard({
     load();
   }, []);
 
+  const primeiroNome =
+    usuario?.nome?.split(" ")[0] || "Usuário";
+
   return (
-    <div>
-      <section className="hero">
+    <div className="dashboard">
+
+      {/* ==========================================
+          BOAS-VINDAS
+      ========================================== */}
+
+      <section className="dashboard-welcome">
         <div>
-          <span className="hero-tag">
-            CARONA CORPORATIVA
+          <span className="dashboard-kicker">
+            PAINEL PRINCIPAL
           </span>
 
-          <h2>
-            Encontre uma carona para o trabalho.
-          </h2>
+          <h1>
+            Olá, {primeiroNome}.
+          </h1>
 
           <p>
-            Economize, compartilhe o caminho e
-            conecte-se com colegas da empresa.
+            Encontre uma carona ou ofereça uma vaga
+            para seus colegas.
           </p>
+        </div>
+
+        <div className="dashboard-welcome-actions">
+
+          <button
+            className="secondary-button"
+            onClick={() => onNavigate("minhas-caronas")}
+          >
+            Oferecer carona
+          </button>
 
           <button
             className="primary-button"
             onClick={() => onNavigate("buscar")}
           >
-            Encontrar uma carona
+            Buscar carona
           </button>
-        </div>
 
-        <div className="hero-illustration">
-          🚗
         </div>
       </section>
 
-      <section className="section">
+      {/* ==========================================
+          ESTATÍSTICAS
+      ========================================== */}
+
+      <section className="dashboard-stats">
+
+        <button
+          className="dashboard-stat"
+          onClick={() => onNavigate("buscar")}
+        >
+          <div className="dashboard-stat-icon blue">
+            🚗
+          </div>
+
+          <div>
+            <span>Carona disponíveis</span>
+
+            <strong>
+              {loading ? "—" : catches.length}
+            </strong>
+          </div>
+        </button>
+
+        <button
+          className="dashboard-stat"
+          onClick={() => onNavigate("reservas")}
+        >
+          <div className="dashboard-stat-icon green">
+            ✓
+          </div>
+
+          <div>
+            <span>Minhas reservas</span>
+
+            <strong>—</strong>
+          </div>
+        </button>
+
+        <button
+          className="dashboard-stat"
+          onClick={() => onNavigate("minhas-caronas")}
+        >
+          <div className="dashboard-stat-icon orange">
+            ↑
+          </div>
+
+          <div>
+            <span>Minhas caronas</span>
+
+            <strong>—</strong>
+          </div>
+        </button>
+
+      </section>
+
+      {/* ==========================================
+          ACESSO RÁPIDO
+      ========================================== */}
+
+      <section className="dashboard-shortcuts">
+
         <div className="section-heading">
+
           <div>
             <span className="section-kicker">
-              PARA VOCÊ
+              ACESSO RÁPIDO
+            </span>
+
+            <h2>
+              O que você deseja fazer?
+            </h2>
+          </div>
+
+        </div>
+
+        <div className="shortcut-grid">
+
+          <button
+            className="shortcut-card"
+            onClick={() => onNavigate("buscar")}
+          >
+            <div className="shortcut-icon blue">
+              🔎
+            </div>
+
+            <div>
+              <strong>
+                Buscar carona
+              </strong>
+
+              <p>
+                Encontre funcionários que fazem
+                um trajeto próximo ao seu.
+              </p>
+            </div>
+
+            <span className="shortcut-arrow">
+              →
+            </span>
+          </button>
+
+          <button
+            className="shortcut-card"
+            onClick={() => onNavigate("minhas-caronas")}
+          >
+            <div className="shortcut-icon green">
+              🚘
+            </div>
+
+            <div>
+              <strong>
+                Oferecer carona
+              </strong>
+
+              <p>
+                Publique uma carona e compartilhe
+                suas vagas com colegas.
+              </p>
+            </div>
+
+            <span className="shortcut-arrow">
+              →
+            </span>
+          </button>
+
+          <button
+            className="shortcut-card"
+            onClick={() => onNavigate("veiculos")}
+          >
+            <div className="shortcut-icon orange">
+              🚙
+            </div>
+
+            <div>
+              <strong>
+                Meus veículos
+              </strong>
+
+              <p>
+                Consulte os veículos cadastrados
+                no seu perfil.
+              </p>
+            </div>
+
+            <span className="shortcut-arrow">
+              →
+            </span>
+          </button>
+
+        </div>
+
+      </section>
+
+      {/* ==========================================
+          PRÓXIMAS CARONAS
+      ========================================== */}
+
+      <section className="section">
+
+        <div className="section-heading">
+
+          <div>
+            <span className="section-kicker">
+              DISPONÍVEIS AGORA
             </span>
 
             <h2>
@@ -706,6 +879,7 @@ function Dashboard({
           >
             Ver todas →
           </button>
+
         </div>
 
         {loading ? (
@@ -714,51 +888,91 @@ function Dashboard({
           </div>
         ) : catches.length === 0 ? (
           <EmptyState
-            title="Nenhuma carona encontrada"
-            description="Ainda não existem caronas disponíveis."
+            title="Nenhuma carona disponível"
+            description="Ainda não existem caronas cadastradas. Que tal oferecer a primeira?"
           />
         ) : (
           <div className="ride-grid">
-            {catches.map((carona) => (
+
+            {catches.slice(0, 3).map((carona) => (
               <CaronaCard
                 key={carona.id}
                 carona={carona}
                 onReserve={() => onNavigate("buscar")}
               />
             ))}
+
           </div>
         )}
+
       </section>
 
-      <section className="info-grid">
-        <div className="info-card">
-          <span>📍</span>
-          <div>
-            <strong>Seu bairro</strong>
-            <p>{usuario?.bairro || "Não informado"}</p>
+      {/* ==========================================
+          INFORMAÇÕES DO USUÁRIO
+      ========================================== */}
+
+      <section className="dashboard-footer-grid">
+
+        <div className="dashboard-profile-card">
+
+          <div className="dashboard-profile-avatar">
+            {primeiroNome.charAt(0).toUpperCase()}
           </div>
+
+          <div>
+
+            <span className="section-kicker">
+              SEU PERFIL
+            </span>
+
+            <h3>
+              {usuario?.nome || "Usuário"}
+            </h3>
+
+            <p>
+              {usuario?.bairro
+                ? `Morador do bairro ${usuario.bairro}`
+                : "Bairro não informado"}
+            </p>
+
+          </div>
+
+          <button
+            className="text-button"
+            onClick={() => onNavigate("perfil")}
+          >
+            Ver perfil →
+          </button>
+
         </div>
 
-        <div className="info-card">
-          <span>🤝</span>
-          <div>
-            <strong>Compartilhe</strong>
-            <p>
-              Divida custos e ajude seus colegas.
-            </p>
+        <div className="dashboard-impact-card">
+
+          <div className="dashboard-impact-icon">
+            🌱
           </div>
+
+          <div>
+
+            <span className="section-kicker">
+              IMPACTO COLETIVO
+            </span>
+
+            <h3>
+              Compartilhar transforma o trajeto.
+            </h3>
+
+            <p>
+              Menos carros nas ruas, redução de custos
+              e mais integração entre os funcionários.
+            </p>
+
+          </div>
+
         </div>
 
-        <div className="info-card">
-          <span>🌱</span>
-          <div>
-            <strong>Mais sustentável</strong>
-            <p>
-              Menos carros, menos impacto.
-            </p>
-          </div>
-        </div>
       </section>
+
     </div>
   );
 }
