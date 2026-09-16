@@ -115,8 +115,9 @@ export async function registrarUsuario(data: {
   senha: string;
   matricula: string;
   bairro: string;
+  telefone?: string;
 }): Promise<LoginResponse> {
-  return request<LoginResponse>(
+  const response = await request<LoginResponse>(
     "/auth/registrar",
     {
       method: "POST",
@@ -124,6 +125,18 @@ export async function registrarUsuario(data: {
     },
     false
   );
+
+  localStorage.setItem(
+    "viacar_token",
+    response.token
+  );
+
+  localStorage.setItem(
+    "viacar_usuario",
+    JSON.stringify(response.usuario)
+  );
+
+  return response;
 }
 
 export function getUsuarioSalvo(): Usuario | null {

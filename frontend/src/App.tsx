@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./App.css";
 
 import {
   buscarCarona,
@@ -13,7 +14,8 @@ import {
   listarVeiculos,
   login,
   logoutUsuario,
-} from "./api";
+  registrarUsuario,
+} from "../api";
 
 import type {
   Carona,
@@ -106,7 +108,11 @@ function App() {
 }
 
 // ==========================================
-// LOGIN
+// LOGIN / CADASTRO
+// ==========================================
+
+// ==========================================
+// LOGIN / CADASTRO
 // ==========================================
 
 function LoginScreen({
@@ -114,23 +120,32 @@ function LoginScreen({
 }: {
   onLogin: (usuario: Usuario) => void;
 }) {
-  const [email, setEmail] = useState(
-    "willian@viacar.com.br"
-  );
+  const [modoCadastro, setModoCadastro] = useState(false);
 
-  const [senha, setSenha] = useState("viacar123");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+
+  const [nome, setNome] = useState("");
+  const [matricula, setMatricula] = useState("");
+  const [bairro, setBairro] = useState("");
+  const [telefone, setTelefone] = useState("");
 
   const [loading, setLoading] = useState(false);
-
   const [erro, setErro] = useState("");
+  const [sucesso, setSucesso] = useState("");
 
-  async function handleSubmit(
-    event: React.FormEvent
-  ) {
+  function trocarModo() {
+    setModoCadastro((atual) => !atual);
+    setErro("");
+    setSucesso("");
+  }
+
+  async function handleLogin(event: React.FormEvent) {
     event.preventDefault();
 
     setLoading(true);
     setErro("");
+    setSucesso("");
 
     try {
       const response = await login(email, senha);
@@ -147,9 +162,50 @@ function LoginScreen({
     }
   }
 
+  async function handleCadastro(event: React.FormEvent) {
+    event.preventDefault();
+
+    setLoading(true);
+    setErro("");
+    setSucesso("");
+
+    try {
+      const response = await registrarUsuario({
+        nome,
+        email,
+        senha,
+        matricula,
+        bairro,
+        telefone: telefone || undefined,
+      });
+
+      localStorage.setItem("viacar_token", response.token);
+
+      localStorage.setItem(
+        "viacar_usuario",
+        JSON.stringify(response.usuario)
+      );
+
+      setSucesso("Conta criada com sucesso.");
+
+      setTimeout(() => {
+        onLogin(response.usuario);
+      }, 400);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível criar sua conta."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="login-page">
       <div className="login-card">
+
         <div className="brand">
           <div className="brand-icon">V</div>
 
@@ -160,66 +216,227 @@ function LoginScreen({
         </div>
 
         <div className="login-header">
-          <h2>Bem-vindo de volta</h2>
+          <span className="auth-kicker">
+            {modoCadastro ? "NOVO CADASTRO" : "ACESSO"}
+          </span>
+
+          <h2>
+            {modoCadastro
+              ? "Crie sua conta"
+              : "Bem-vindo de volta"}
+          </h2>
 
           <p>
-            Entre para encontrar ou oferecer uma carona.
+            {modoCadastro
+              ? "Cadastre seus dados para começar a utilizar o ViaCar."
+              : "Entre para encontrar ou oferecer uma carona."}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <label>
-            E-mail
+        {modoCadastro ? (
+          <form onSubmit={handleCadastro}>
 
-            <input
-              type="email"
-              value={email}
-              onChange={(event) =>
-                setEmail(event.target.value)
-              }
-              placeholder="seu@email.com"
-              required
-            />
-          </label>
-
-          <label>
-            Senha
-
-            <input
-              type="password"
-              value={senha}
-              onChange={(event) =>
-                setSenha(event.target.value)
-              }
-              placeholder="Sua senha"
-              required
-            />
-          </label>
-
-          {erro && (
-            <div className="error-message">
-              {erro}
+            <div className="form-section-title">
+              Dados pessoais
             </div>
-          )}
 
-          <button
-            className="primary-button"
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? "Entrando..." : "Entrar"}
-          </button>
-        </form>
+            <label>
+              Nome completo
 
-        <div className="login-demo">
-          <strong>Usuário de demonstração</strong>
+              <input
+                type="text"
+                value={nome}
+                onChange={(event) =>
+                  setNome(event.target.value)
+                }
+                placeholder="Digite seu nome completo"
+                required
+              />
+            </label>
 
-          <span>
-            willian@viacar.com.br
-          </span>
+            <label>
+              E-mail corporativo
 
-          <span>Senha: viacar123</span>
-        </div>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) =>
+                  setEmail(event.target.value)
+                }
+                placeholder="seu@email.com"
+                required
+              />
+            </label>
+
+            <div className="form-row">
+
+              <label>
+                Bairro
+
+                <input
+                  type="text"
+                  value={bairro}
+                  onChange={(event) =>
+                    setBairro(event.target.value)
+                  }
+                  placeholder="Ex.: Centro"
+                  required
+                />
+              </label>
+
+              <label>
+                Telefone
+
+                <span className="optional-label">
+                  opcional
+                </span>
+
+                <input
+                  type="tel"
+                  value={telefone}
+                  onChange={(event) =>
+                    setTelefone(event.target.value)
+                  }
+                  placeholder="(47) 99999-9999"
+                />
+              </label>
+
+            </div>
+
+            <div className="form-section-title">
+              Dados corporativos
+            </div>
+
+            <div className="form-row">
+
+              <label>
+                Matrícula
+
+                <input
+                  type="text"
+                  value={matricula}
+                  onChange={(event) =>
+                    setMatricula(event.target.value)
+                  }
+                  placeholder="Ex.: W001"
+                  required
+                />
+              </label>
+
+              <label>
+                Senha
+
+                <input
+                  type="password"
+                  value={senha}
+                  onChange={(event) =>
+                    setSenha(event.target.value)
+                  }
+                  placeholder="Mínimo de 8 caracteres"
+                  minLength={8}
+                  required
+                />
+              </label>
+
+            </div>
+
+            <div className="password-hint">
+              A senha deve possuir pelo menos 8 caracteres.
+            </div>
+
+            {erro && (
+              <div className="error-message">
+                {erro}
+              </div>
+            )}
+
+            {sucesso && (
+              <div className="success-message">
+                {sucesso}
+              </div>
+            )}
+
+            <button
+              className="primary-button auth-button"
+              type="submit"
+              disabled={loading}
+            >
+              {loading
+                ? "Criando conta..."
+                : "Criar minha conta"}
+            </button>
+
+            <div className="login-switch">
+              <span>Já possui uma conta?</span>
+
+              <button
+                type="button"
+                onClick={trocarModo}
+              >
+                Entrar
+              </button>
+            </div>
+
+          </form>
+        ) : (
+          <form onSubmit={handleLogin}>
+
+            <label>
+              E-mail
+
+              <input
+                type="email"
+                value={email}
+                onChange={(event) =>
+                  setEmail(event.target.value)
+                }
+                placeholder="seu@email.com"
+                required
+              />
+            </label>
+
+            <label>
+              Senha
+
+              <input
+                type="password"
+                value={senha}
+                onChange={(event) =>
+                  setSenha(event.target.value)
+                }
+                placeholder="Sua senha"
+                required
+              />
+            </label>
+
+            {erro && (
+              <div className="error-message">
+                {erro}
+              </div>
+            )}
+
+            <button
+              className="primary-button auth-button"
+              type="submit"
+              disabled={loading}
+            >
+              {loading ? "Entrando..." : "Entrar"}
+            </button>
+
+            <div className="login-switch">
+              <span>Não possui uma conta?</span>
+
+              <button
+                type="button"
+                onClick={trocarModo}
+              >
+                Criar conta
+              </button>
+            </div>
+
+          </form>
+        )}
+
       </div>
     </div>
   );
