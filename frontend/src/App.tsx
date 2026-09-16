@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 
 import {
+  criarCarona,
   criarReserva,
   getMeuPerfil,
   getUsuarioSalvo,
@@ -31,7 +32,8 @@ type Tela =
   | "reservas"
   | "veiculos"
   | "rotas"
-  | "perfil";
+  | "perfil"
+  | "oferecer";
 
 function App() {
   const [autenticado, setAutenticado] = useState(isAuthenticated());
@@ -79,6 +81,12 @@ function App() {
 
         {tela === "buscar" && <BuscarCaronas />}
 
+        {tela === "oferecer" && (
+  <OferecerCarona
+    onSuccess={() => setTela("minhas-caronas")}
+    onNavigate={setTela}
+  />
+)}
         {tela === "minhas-caronas" && (
           <MinhasCaronas />
         )}
@@ -493,6 +501,18 @@ function Sidebar({
         </button>
 
         <button
+        className={
+            tela === "oferecer"
+              ? "nav-item active"
+              : "nav-item"
+         }
+          onClick={() => onNavigate("oferecer")}
+        >
+         <span>➕</span>
+          Oferecer carona
+        </button>
+
+        <button
           className={
             tela === "minhas-caronas"
               ? "nav-item active"
@@ -686,14 +706,14 @@ function Dashboard({
 
           <button
             className="secondary-button"
-            onClick={() => onNavigate("minhas-caronas")}
+            onClick={() => onNavigate("oferecer")}
           >
             Oferecer carona
           </button>
 
           <button
             className="primary-button"
-            onClick={() => onNavigate("buscar")}
+            onClick={() => onNavigate("oferecer")}
           >
             Buscar carona
           </button>
@@ -972,6 +992,473 @@ function Dashboard({
 
       </section>
 
+    </div>
+  );
+}
+// ==========================================
+// OFERECER CARONA
+// ==========================================
+
+function OferecerCarona({
+  onSuccess,
+  onNavigate,
+}: {
+  onSuccess: () => void;
+  onNavigate: (tela: Tela) => void;
+}) {
+  const [rotas, setRotas] = useState<Rota[]>([]);
+  const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
+
+  const [rotaId, setRotaId] = useState("");
+  const [veiculoId, setVeiculoId] = useState("");
+  const [data, setData] = useState("");
+  const [vagasOfertadas, setVagasOfertadas] = useState(1);
+  const [observacao, setObservacao] = useState("");
+
+  const [loading, setLoading] = useState(true);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [sucesso, setSucesso] = useState("");
+
+  useEffect(() => {
+    async function carregarDados() {
+      setLoading(true);
+      setErro("");
+
+      try {
+        const [rotasData, veiculosData] = await Promise.all([
+          listarRotas(),
+          listarVeiculos(),
+        ]);
+
+        setRotas(rotasData);
+        setVeiculos(veiculosData);
+      } catch (error) {
+        setErro(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível carregar suas rotas e veículos."
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    carregarDados();
+  }, []);
+
+  const rotaSelecionada = rotas.find(
+    (rota) => rota.id === rotaId
+  );
+
+  const veiculoSelecionado = veiculos.find(
+    (veiculo) => veiculo.id === veiculoId
+  );
+
+  useEffect(() => {
+    if (veiculoSelecionado) {
+      setVagasOfertadas(
+        Math.min(
+          vagasOfertadas,
+          veiculoSelecionado.capacidadePassageiros
+        )
+      );
+    }
+  }, [veiculoSelecionado]);
+
+  async function publicarCarona(
+    event: React.FormEvent
+  ) {
+    event.preventDefault();
+
+    setErro("");
+    setSucesso("");
+
+    if (!rotaId) {
+      setErro("Selecione uma rota.");
+      return;
+    }
+
+    if (!veiculoId) {
+      setErro("Selecione um veículo.");
+      return;
+    }
+
+    if (!data) {
+      setErro("Informe a data da carona.");
+      return;
+    }
+
+    if (!vagasOfertadas || vagasOfertadas < 1) {
+      setErro("Ofereça pelo menos uma vaga.");
+      return;
+    }
+
+    if (
+      veiculoSelecionado &&
+      vagasOfertadas >
+        veiculoSelecionado.capacidadePassageiros
+    ) {
+      setErro(
+        `Este veículo comporta no máximo ${veiculoSelecionado.capacidadePassageiros} passageiros.`
+      );
+      return;
+    }
+
+    setEnviando(true);
+
+    try {
+      await criarCarona({
+        rotaId,
+        veiculoId,
+        data,
+        vagasOfertadas,
+        observacao: observacao.trim() || undefined,
+      });
+
+      setSucesso("Carona publicada com sucesso!");
+
+      setTimeout(() => {
+        onSuccess();
+      }, 700);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível publicar a carona."
+      );
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div>
+        <PageTitle
+          kicker="MOTORISTA"
+          title="Oferecer carona"
+          description="Publique uma vaga para compartilhar seu trajeto com colegas."
+        />
+
+        <div className="loading">
+          Carregando suas rotas e veículos...
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <PageTitle
+        kicker="MOTORISTA"
+        title="Oferecer carona"
+        description="Escolha uma rota, um veículo e disponibilize suas vagas."
+      />
+
+      {rotas.length === 0 || veiculos.length === 0 ? (
+        <div className="offer-empty-card">
+          <div className="empty-icon">
+            🚗
+          </div>
+
+          <h3>
+            Prepare seu cadastro antes de oferecer
+          </h3>
+
+          <p>
+            Para publicar uma carona, você precisa ter
+            pelo menos uma rota e um veículo cadastrados.
+          </p>
+
+          <div className="offer-empty-actions">
+            {rotas.length === 0 && (
+              <button
+                 type="button"
+                 className="secondary-button"
+                 onClick={() => onNavigate("rotas")}
+              >
+            Cadastrar rota
+              </button>
+                )}
+
+            {veiculos.length === 0 && (
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => onNavigate("veiculos")}
+  >
+    Cadastrar veículo
+  </button>
+              )}
+          </div>
+        </div>
+      ) : (
+        <form
+          className="offer-form"
+          onSubmit={publicarCarona}
+        >
+          <div className="offer-form-card">
+
+            <div className="offer-form-header">
+              <div>
+                <span className="section-kicker">
+                  DADOS DA CARONA
+                </span>
+
+                <h3>
+                  Configure sua oferta
+                </h3>
+
+                <p>
+                  O horário da carona será definido
+                  automaticamente pela rota selecionada.
+                </p>
+              </div>
+            </div>
+
+            <div className="offer-form-grid">
+
+              <label>
+                Rota
+
+                <select
+                  value={rotaId}
+                  onChange={(event) =>
+                    setRotaId(event.target.value)
+                  }
+                  required
+                >
+                  <option value="">
+                    Selecione uma rota
+                  </option>
+
+                  {rotas.map((rota) => (
+                    <option
+                      key={rota.id}
+                      value={rota.id}
+                    >
+                      {rota.apelido ||
+                        `${rota.origemBairro} → ${rota.destinoBairro}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Veículo
+
+                <select
+                  value={veiculoId}
+                  onChange={(event) =>
+                    setVeiculoId(event.target.value)
+                  }
+                  required
+                >
+                  <option value="">
+                    Selecione um veículo
+                  </option>
+
+                  {veiculos.map((veiculo) => (
+                    <option
+                      key={veiculo.id}
+                      value={veiculo.id}
+                    >
+                      {veiculo.modelo} ·{" "}
+                      {veiculo.placa}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Data da carona
+
+                <input
+                  type="date"
+                  value={data}
+                  min={
+                    new Date()
+                      .toISOString()
+                      .split("T")[0]
+                  }
+                  onChange={(event) =>
+                    setData(event.target.value)
+                  }
+                  required
+                />
+              </label>
+
+              <label>
+                Vagas oferecidas
+
+                <input
+                  type="number"
+                  min={1}
+                  max={
+                    veiculoSelecionado?.capacidadePassageiros ||
+                    8
+                  }
+                  value={vagasOfertadas}
+                  onChange={(event) =>
+                    setVagasOfertadas(
+                      Number(event.target.value)
+                    )
+                  }
+                  required
+                />
+
+                {veiculoSelecionado && (
+                  <small className="form-help">
+                    Capacidade do veículo:{" "}
+                    {veiculoSelecionado.capacidadePassageiros}{" "}
+                    passageiros.
+                  </small>
+                )}
+              </label>
+
+            </div>
+
+            {rotaSelecionada && (
+              <div className="offer-preview">
+
+                <div>
+                  <span className="section-kicker">
+                    ROTA SELECIONADA
+                  </span>
+
+                  <h3>
+                    {rotaSelecionada.apelido ||
+                      `${rotaSelecionada.origemBairro} → ${rotaSelecionada.destinoBairro}`}
+                  </h3>
+                </div>
+
+                <div className="offer-preview-details">
+
+                  <div>
+                    <small>Origem</small>
+
+                    <strong>
+                      {rotaSelecionada.origemBairro}
+                    </strong>
+
+                    <span>
+                      {rotaSelecionada.origemEndereco}
+                    </span>
+                  </div>
+
+                  <div>
+                    <small>Destino</small>
+
+                    <strong>
+                      {rotaSelecionada.destinoBairro}
+                    </strong>
+
+                    <span>
+                      {rotaSelecionada.destinoEndereco}
+                    </span>
+                  </div>
+
+                  <div>
+                    <small>Horário</small>
+
+                    <strong>
+                      {rotaSelecionada.horarioPartida}
+                    </strong>
+
+                    <span>
+                      {rotaSelecionada.sentido === "IDA"
+                        ? "Ida"
+                        : "Volta"}
+                    </span>
+                  </div>
+
+                </div>
+              </div>
+            )}
+
+            {veiculoSelecionado && (
+              <div className="offer-vehicle-preview">
+
+                <div className="vehicle-icon">
+                  🚙
+                </div>
+
+                <div>
+                  <span className="section-kicker">
+                    VEÍCULO
+                  </span>
+
+                  <strong>
+                    {veiculoSelecionado.modelo}
+                  </strong>
+
+                  <span>
+                    {veiculoSelecionado.cor} ·{" "}
+                    {veiculoSelecionado.placa}
+                  </span>
+                </div>
+
+              </div>
+            )}
+
+            <label className="offer-observation">
+              Observação
+
+              <textarea
+                value={observacao}
+                onChange={(event) =>
+                  setObservacao(event.target.value)
+                }
+                placeholder="Ex.: Posso combinar pontos de embarque próximos ao trajeto."
+                maxLength={255}
+                rows={4}
+              />
+
+              <small className="form-help">
+                Opcional · máximo de 255 caracteres.
+              </small>
+            </label>
+
+            {erro && (
+              <div className="error-message">
+                {erro}
+              </div>
+            )}
+
+            {sucesso && (
+              <div className="success-message">
+                {sucesso}
+              </div>
+            )}
+
+            <div className="offer-form-footer">
+
+              <div>
+                <strong>
+                  Pronto para compartilhar?
+                </strong>
+
+                <span>
+                  Sua carona ficará disponível para outros funcionários.
+                </span>
+              </div>
+
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={enviando}
+              >
+                {enviando
+                  ? "Publicando..."
+                  : "Publicar carona"}
+              </button>
+
+            </div>
+
+          </div>
+        </form>
+      )}
     </div>
   );
 }

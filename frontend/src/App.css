@@ -2432,3 +2432,329 @@ select:focus {
     text-align: left;
   }
 }
+/* ==========================================
+   OFERECER CARONA
+   ========================================== */
+
+.offer-form {
+  width: 100%;
+}
+
+.offer-form-card {
+  background: #ffffff;
+  border: 1px solid #e7e9ee;
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.offer-form-header {
+  padding-bottom: 24px;
+  border-bottom: 1px solid #eef0f3;
+  margin-bottom: 24px;
+}
+
+.offer-form-header h3 {
+  margin: 6px 0 6px;
+  font-size: 21px;
+  font-weight: 700;
+  color: #17191c;
+}
+
+.offer-form-header p {
+  margin: 0;
+  color: #737984;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.section-kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #8a9099;
+  text-transform: uppercase;
+}
+
+.offer-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.offer-form-grid label,
+.offer-observation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #34383f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.offer-form-grid select,
+.offer-form-grid input,
+.offer-observation textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #dfe2e7;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #202329;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 12px 13px;
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.offer-form-grid select,
+.offer-form-grid input {
+  min-height: 46px;
+}
+
+.offer-form-grid select:focus,
+.offer-form-grid input:focus,
+.offer-observation textarea:focus {
+  border-color: #17191c;
+  box-shadow: 0 0 0 3px rgba(23, 25, 28, 0.06);
+}
+
+.offer-observation {
+  margin-top: 22px;
+}
+
+.offer-observation textarea {
+  resize: vertical;
+  min-height: 105px;
+  line-height: 1.5;
+}
+
+.form-help {
+  display: block;
+  margin-top: -2px;
+  color: #8a9099;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* Preview da rota */
+
+.offer-preview {
+  margin-top: 24px;
+  padding: 22px;
+  border: 1px solid #e5e8ec;
+  border-radius: 14px;
+  background: #f8f9fb;
+}
+
+.offer-preview h3 {
+  margin: 5px 0 0;
+  font-size: 17px;
+  color: #202329;
+}
+
+.offer-preview-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e8ec;
+}
+
+.offer-preview-details div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.offer-preview-details small {
+  color: #8a9099;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.offer-preview-details strong {
+  color: #25282d;
+  font-size: 14px;
+}
+
+.offer-preview-details span {
+  color: #737984;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Preview do veículo */
+
+.offer-vehicle-preview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid #e5e8ec;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.vehicle-icon {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #f1f2f4;
+  font-size: 21px;
+}
+
+.offer-vehicle-preview > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.offer-vehicle-preview strong {
+  color: #25282d;
+  font-size: 14px;
+}
+
+.offer-vehicle-preview span:last-child {
+  color: #737984;
+  font-size: 12px;
+}
+
+/* Rodapé do formulário */
+
+.offer-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid #eef0f3;
+}
+
+.offer-form-footer > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.offer-form-footer strong {
+  color: #25282d;
+  font-size: 14px;
+}
+
+.offer-form-footer span {
+  color: #737984;
+  font-size: 12px;
+}
+
+/* Estado sem rota/veículo */
+
+.offer-empty-card {
+  background: #ffffff;
+  border: 1px solid #e7e9ee;
+  border-radius: 18px;
+  padding: 48px 32px;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.offer-empty-card .empty-icon {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 15px;
+  background: #f1f2f4;
+  font-size: 27px;
+}
+
+.offer-empty-card h3 {
+  margin: 0 0 8px;
+  color: #202329;
+  font-size: 19px;
+}
+
+.offer-empty-card p {
+  max-width: 500px;
+  margin: 0 auto;
+  color: #737984;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.offer-empty-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* Mensagens */
+
+.success-message {
+  margin-top: 20px;
+  padding: 13px 15px;
+  border: 1px solid #cfe8d5;
+  border-radius: 10px;
+  background: #f2faf4;
+  color: #276738;
+  font-size: 13px;
+}
+
+.error-message {
+  margin-top: 20px;
+}
+
+/* Responsividade */
+
+@media (max-width: 900px) {
+  .offer-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .offer-preview-details {
+    grid-template-columns: 1fr;
+  }
+
+  .offer-form-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .offer-form-footer .primary-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .offer-form-card {
+    padding: 20px;
+    border-radius: 14px;
+  }
+
+  .offer-empty-card {
+    padding: 36px 20px;
+  }
+
+  .offer-empty-actions {
+    flex-direction: column;
+  }
+
+  .offer-empty-actions button {
+    width: 100%;
+  }
+}
