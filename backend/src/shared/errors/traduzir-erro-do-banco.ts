@@ -16,6 +16,11 @@ const POSTGRES_VIOLACAO_CHECK = '23514';
 const POSTGRES_VIOLACAO_UNIQUE = '23505';
 const POSTGRES_VIOLACAO_FK = '23503';
 
+/** `invalid input syntax for type uuid` — o texto da URL nao vira uuid. */
+const POSTGRES_TEXTO_INVALIDO = '22P02';
+
+const ID_INVALIDO = 'O identificador informado na URL não é válido.';
+
 /** Captura `code: "23514"` e `message: "..."` de dentro do erro cru do conector. */
 const ERRO_CRU_DO_POSTGRES = /code:\s*"(\d{5})"[\s\S]*?message:\s*"((?:[^"\\]|\\.)*)"/;
 
@@ -45,6 +50,21 @@ function traduzirConhecido(erro: Prisma.PrismaClientKnownRequestError): AppError
       );
     case 'P2025':
       return new AppError('NAO_ENCONTRADO', 'Registro não encontrado.');
+
+    // Id malformado chegando pelo ORM: `/veiculos/abc`, ou um id que veio vazio
+    // do estado do frontend. Sem este ramo vira 500 "Erro inesperado", e quem
+    // chamou nao descobre que o problema e o id que ele mesmo mandou.
+    case 'P2023':
+      return new AppError('VALIDACAO', ID_INVALIDO);
+
+    // Falha de `$queryRaw` — o codigo do Postgres vem em `meta.code`. E por aqui
+    // que um id torto chega quando a rota usa o FOR UPDATE da RN-02, que faz
+    // cast explicito para uuid.
+    case 'P2010':
+      return erro.meta?.['code'] === POSTGRES_TEXTO_INVALIDO
+        ? new AppError('VALIDACAO', ID_INVALIDO)
+        : null;
+
     default:
       return null;
   }
@@ -70,6 +90,8 @@ function traduzirCru(erro: Prisma.PrismaClientUnknownRequestError): AppError | n
       return new AppError('CONFLITO', 'Já existe um registro cadastrado com estes dados.');
     case POSTGRES_VIOLACAO_FK:
       return new AppError('CONFLITO', 'Este registro está vinculado a outros e não pode ser alterado.');
+    case POSTGRES_TEXTO_INVALIDO:
+      return new AppError('VALIDACAO', ID_INVALIDO);
     default:
       return null;
   }
