@@ -85,6 +85,36 @@ Quatro defeitos que não aparecem no caminho feliz, todos reproduzidos contra o 
 | DT-19 | **Datas inexistentes eram aceitas e roladas em silêncio.** `2026-02-30` virava 02/03; `2027-02-29` virava 01/03. O `Date.parse` rola o excedente em vez de recusar | Validação por ida e volta no `carona.schema.ts`: `new Date(...).toISOString().slice(0,10) === valor` |
 | DT-20 | **Cancelar carona já partida apagava o histórico.** O cancelamento em cascata marcava as reservas como `CANCELADA`, destruindo o registro de quem de fato viajou — base da pontuação (N2) e da conduta (N3) | `cancelar()` recusa carona cujo `dataPartida` já passou, com mensagem apontando `REALIZADA` / `NAO_COMPARECEU` |
 
+### DT-24 — Fábrica de teste montava placa de tamanho variável · **RESOLVIDO no D4**
+
+`criarVeiculo()` interpolava o contador direto na placa (`TST${n}A${n % 100}`). O contador é do módulo e **não zera entre arquivos de teste**, então ao passar de 99 veículos a placa ficava com 9 caracteres e estourava o `VARCHAR(8)`.
+
+O que torna isso pior do que parece: a falha não aparece em quem causou. Ela aparece em qualquer teste que por acaso rode depois do 99º veículo — no D4 foram 8 testes de reserva falhando com `The provided value for the column is too long`, apontando para `fabricas.ts` e não para a regra sendo testada. Um arquivo de teste novo podia quebrar um arquivo antigo sem encostar nele.
+
+Corrigido com `placaDeTeste(n)`, que gera sempre 7 caracteres no formato Mercosul (LLLNLNN) e continua único até ~1300 veículos por execução.
+
+### DT-25 — Cancelar reserva de carona já partida · **RESOLVIDO no D4**
+
+Mesma raiz do DT-20, na outra ponta: o passageiro podia cancelar a reserva depois da viagem ter acontecido. A linha ia para `CANCELADA` e o registro de que ele **de fato viajou** desaparecia — e é justamente esse registro que alimenta a pontuação (N2) e a avaliação de conduta (N3).
+
+`reserva.service.cancelar()` recusa quando `carona.dataPartida` já passou. Quem faltou é `NAO_COMPARECEU`, e isso é decisão do motorista, não do passageiro.
+
+### DT-26 a DT-30 — Achados da auditoria de fechamento do D4 · **RESOLVIDOS**
+
+Sete hipóteses de defeito levantadas depois do D4 pronto e com a suíte verde, cada uma reproduzida contra o banco antes de virar afirmação. Seis se confirmaram; cinco foram corrigidas e uma virou débito (DT-31).
+
+| ID | Defeito | Correção |
+|---|---|---|
+| DT-26 | **`PATCH /caronas/:id` não sincronizava o status.** Reduzir vagas até encher deixava a carona `ABERTA` com zero vaga, aparecendo na busca e recusando todo mundo; aumentar vagas numa `LOTADA` não a devolvia para a busca — ela sumia para sempre com o carro pela metade | `atualizar()` recalcula o status pela lotação, nas duas direções (armadilha 3.10) |
+| DT-27 | **`atualizar()` não travava a carona.** Reduzir para 1 vaga enquanto uma segunda reserva estava em voo terminava com 2 confirmadas em 1 vaga — a RN-02 furada pela porta do motorista | `$transaction` + `travarCaronaParaAtualizacao`, o mesmo mecanismo já usado na reserva |
+| DT-28 | **`cancelar()` da carona não travava a linha.** Uma reserva que entrava durante o cancelamento não era vista pelo `updateMany` da cascata, mas o `update` da carona vencia depois: passageiro `CONFIRMADA` numa carona `CANCELADA`, exatamente o estado que a RN-08 existe para impedir | Transação interativa com a carona travada antes da cascata |
+| DT-29 | **Qualquer id malformado na URL virava 500.** Existia desde o D2 em todos os módulos, e passou por três revisões sem ser notado — porque todo teste usava uuid válido | `P2023` e `P2010`/`22P02` no tradutor de erros, viram 400 (armadilha 3.11) |
+| DT-30 | **Corpo JSON inválido virava 500.** O `express.json()` lança um `SyntaxError` próprio, que não é `AppError` nem `ZodError` e caía no 500 genérico | `tratarErros` reconhece `entity.parse.failed`, `entity.too.large` e `encoding.unsupported` → 400 |
+
+Também foi removido um trecho de código morto em `reserva.service.criar()`: a rede de segurança da RN-02 tentava corrigir o status antes de recusar, mas a gravação era desfeita pelo `throw` da linha seguinte, junto com a transação. O comentário prometia uma auto-correção que nunca acontecia.
+
+**O que a auditoria confirmou estar certo:** a RN-10 com carona das 22:00 (que é 01:00Z do dia seguinte) trata o dia local corretamente nas duas pontas, e `POST /caronas/:caronaId/reservas` sem token responde 401, não 500.
+
 ---
 
 ## 2. Débitos abertos
@@ -101,17 +131,18 @@ Quatro defeitos que não aparecem no caminho feliz, todos reproduzidos contra o 
 | DT-15 | ESLint e Prettier não configurados | A Seção 6.3 do acordo condiciona aprovação de PR ao linter — hoje é inaplicável | `@typescript-eslint` + Prettier + passo no CI (**DevOps**) |
 | DT-16 | Sem `helmet` nem cabeçalhos de segurança | Respostas sem proteção básica de browser | `app.use(helmet())` |
 
-### Achados do fechamento do D3, adiados de propósito
+### Achados das revisões de fechamento, adiados de propósito
 
-Levantados na revisão de fechamento do D3 e classificados como recomendados, não obrigatórios. **Decisão do time: fazer depois que todas as fases estiverem entregues**, para não gastar tempo de implementação em polimento antes da N1.
+Levantados nas revisões de fechamento do D3 e do D4 e classificados como recomendados, não obrigatórios. **Decisão do time: fazer depois que todas as fases estiverem entregues**, para não gastar tempo de implementação em polimento antes da N1.
 
 | ID | Débito | Onde | Impacto | Como pagar |
 |---|---|---|---|---|
 | DT-21 | Dois `as Prisma.RotaUncheckedCreateInput` / `UncheckedUpdateInput` | `rota.service.ts:62` e `:93` | São os **únicos** escapes do TS estrito no projeto inteiro. Se o helper genérico `paraDadosDoBanco` divergir do tipo do Prisma, o compilador fica calado | Tipar `paraDadosDoBanco` com o tipo de entrada correto e remover as duas asserções |
 | DT-22 | `rota.service.atualizar()` não verifica `ativa` | `rota.service.ts` | Dá para editar uma rota já removida. Inofensivo hoje porque rota inativa não abre carona (DT-18), mas é inconsistente com `criar` | Espelhar a checagem de `carregarRotaUtilizavel()` |
+| DT-31 | RN-10 não resiste a concorrência | `reserva.service.ts` | Duas reservas simultâneas em caronas **diferentes** travam linhas diferentes, então nenhuma enxerga a outra e as duas passam. Não tem índice sustentando a regra, como tem no caso da reserva duplicada na mesma carona. Exige a mesma pessoa clicando em duas caronas no mesmo instante, e a RN-10 era opcional no N1 | Índice parcial por `(passageiro, dia, sentido)`, ou um lock por passageiro antes do lock da carona — nessa ordem, sempre, senão dá deadlock |
 | DT-23 | Visibilidade de `passageiros` não documentada | `GET /caronas/{id}`, `openapi.ts` | Qualquer funcionário autenticado vê a lista completa de passageiros de qualquer carona. É decisão defensável num app corporativo interno — o problema é ser **implícita** | Documentar no Swagger, ou restringir ao motorista e aos passageiros confirmados |
 
-> Também fica pendente registrar no Swagger que `GET /caronas` filtra `status = ABERTA`, ou seja, esconde as `LOTADA` além das `CANCELADA`.
+> A outra metade do DT-23 — registrar no Swagger que `GET /caronas` filtra `status = ABERTA` e portanto esconde as `LOTADA`, não só as `CANCELADA` — **foi feita no D4**, junto com a documentação das reservas. O que continua aberto é só a decisão sobre quem pode ver `passageiros`.
 
 ---
 
@@ -200,6 +231,41 @@ Não existe `onDelete: Cascade` em lugar nenhum do schema — de propósito. Usu
 
 `StatusReserva` já prevê os dois. Eles existem para alimentar pontos e conduta no N2/N3. **Não remova do enum** — remover exige migration destrutiva depois.
 
+### 3.10. `carona.status = LOTADA` é derivado, mas fica gravado — e precisa voltar
+
+`vagasDisponiveis` é calculado (armadilha 3.5). `status` **não é**: `LOTADA` é uma coluna, e existe porque `GET /caronas` filtra por `status = ABERTA` no banco, sem conseguir contar reservas na cláusula `WHERE`.
+
+Ser derivado e gravado ao mesmo tempo cria duas obrigações, e a armadilha está em achar que é só uma.
+
+**Primeira: reavaliar nas duas direções.** Quem implementa só a ida deixa a carona presa em `LOTADA` para sempre — ela some da busca e não volta nem com o carro vazio.
+
+**Segunda, e é a que me pegou: são TRÊS escritores, não dois.** A primeira versão desta armadilha listava só os dois do módulo de reservas e esqueceu que o motorista também mexe na lotação, alterando `vagasOfertadas`. O resultado foi carona `ABERTA` com zero vaga aparecendo na busca, e carona `LOTADA` com duas vagas livres invisível para sempre.
+
+| Quem mexe na lotação | Onde | Regra |
+|---|---|---|
+| A última vaga é ocupada | `reserva.service.criar()` | RN-07 |
+| Uma vaga é devolvida | `reserva.service.cancelar()` | RN-06 |
+| **O motorista muda `vagasOfertadas`** | `carona.service.atualizar()` | as duas, conforme a conta |
+
+Por isso a decisão vive numa função só, `carona.service.statusPelaLotacao()`, e os três chamam ela. Se aparecer um quarto escritor — um job de status, um cancelamento em massa —, ele chama também. **Não reimplemente a conta no lugar novo.**
+
+As três rodam dentro da transação que faz a mudança, com a carona travada: sem o lock, o status decide com base numa contagem que já mudou. E status terminal não reabre — uma carona `CONCLUIDA` ou `CANCELADA` não volta para `ABERTA` porque alguém desmarcou.
+
+Os testes que seguram isso: `RN-07 — a carona fecha sozinha ao encher`, `RN-06 — cancelar reserva devolve a vaga` e `RN-06 e RN-07 pela porta do motorista — PATCH muda a lotação`.
+
+### 3.11. Id de rota malformado não chega no banco como erro bonito
+
+`req.params.id` é texto puro. `/veiculos/abc` chega no Prisma, que recusa o cast para uuid — e isso **não** é um erro de "não encontrado", é um erro de driver. Vinha como 500 até o D4.
+
+São dois códigos diferentes, porque são dois caminhos diferentes até o banco:
+
+| Origem | Código | Onde acontece |
+|---|---|---|
+| ORM (`findUnique`, `update`…) | `P2023` | qualquer módulo |
+| `$queryRaw` com `::uuid` | `P2010` + `meta.code = 22P02` | o `FOR UPDATE` da RN-02 |
+
+Os dois são tratados em `traduzir-erro-do-banco.ts` e viram **400 VALIDACAO**, não 404: o id não existe *como id*, então dizer "não encontrado" mandaria o frontend procurar um problema que não é dele. Ao criar um endpoint novo com parâmetro de rota, não precisa validar uuid no controller — o tradutor já cobre.
+
 ---
 
 ## 4. Por onde começar o N2/N3
@@ -207,3 +273,19 @@ Não existe `onDelete: Cascade` em lugar nenhum do schema — de propósito. Usu
 O DER das tabelas de evolução (`EXTRATO_PONTOS`, `AVALIACAO`, `RESGATE`) já está desenhado em [modelagem-dados.md](modelagem-dados.md), seção 4, com as decisões justificadas — inclusive por que saldo de pontos é derivado do extrato e não coluna em `usuario`.
 
 A estrutura em módulos (`controller` → `service` → Prisma) foi montada para que pontuação e avaliação entrem como módulos novos, sem reescrever o que existe. Regra de negócio mora no `service`; se você está escrevendo `if` de negócio dentro de um `controller`, parou no lugar errado.
+
+### Se você quer um primeiro commit pequeno antes de encarar o N2
+
+Pegue o **DT-31**. É o único débito aberto que já vem com o diagnóstico fechado e o caminho escrito, e ele obriga a passar pelas duas coisas que mais importam neste código: transação com lock e teste de concorrência contra banco real.
+
+O defeito: a RN-10 impede duas reservas confirmadas no mesmo dia e sentido, mas não resiste a concorrência. Cada reserva trava a linha da *sua* carona — caronas diferentes, linhas diferentes, então as duas passam. Está reproduzido: duas reservas simultâneas, ambas aceitas.
+
+O caminho sugerido é travar o passageiro antes da carona, no começo de `reserva.service.criar()`:
+
+```ts
+await tx.$queryRaw`SELECT id FROM usuario WHERE id = ${passageiroId}::uuid FOR UPDATE`;
+```
+
+**A ordem é a parte que importa:** usuário, depois carona — sempre, em qualquer transação que precise dos dois. Hoje nada no projeto trava carona e depois usuário, então não há ciclo; inverter a ordem em um lugar só é o que cria deadlock. Antes de dar por pronto, meça: duas reservas do mesmo passageiro em caronas diferentes ao mesmo tempo devem terminar em 1, e duas pessoas diferentes na mesma carona devem continuar terminando em 1 — se esta segunda virar 0 ou travar, o lock ficou largo demais.
+
+Leia a armadilha 3.6 antes. O padrão de teste de concorrência já existe em `tests/regras-negocio/rn-02-concorrencia.test.ts`, é só copiar.
