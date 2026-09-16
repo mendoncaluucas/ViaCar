@@ -158,7 +158,7 @@ Ponto de atenção real: duas reservas simultâneas na última vaga passam as du
 | RN-09 | Só o motorista dono da rota edita/cancela a carona | middleware + service | 403 |
 | RN-10 | Passageiro não pode ter 2 reservas confirmadas em caronas com horário conflitante | service | 409 |
 
-> RN-10 é a única opcional do N1. Se faltar tempo, corta e registra como débito.
+> RN-10 era a única opcional do N1. **Entrou no D4.** "Horário conflitante" ficou definido como **mesmo dia-calendário e mesmo sentido**: ninguém vai duas vezes para o trabalho na mesma manhã. Comparar janelas de horário seria mais fino e mais frágil — dois carros saindo 07:00 e 07:40 de bairros diferentes continuam sendo uma escolha só, e o segundo motorista ficaria com um lugar vazio. O dia é o dia-calendário **no fuso da empresa**, não em UTC: a carona da volta das 22:00 é 01:00Z do dia seguinte e cairia no dia errado.
 
 ---
 

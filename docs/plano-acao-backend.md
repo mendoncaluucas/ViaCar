@@ -73,7 +73,7 @@ PATCH  /caronas/:id                    alterar vagas → revalida RN-01
 POST   /caronas/:id/cancelar           RN-08 cascata
 GET    /caronas/minhas                 como motorista
 
-POST   /caronas/:id/reservas           ⚠ RN-02 — transação + FOR UPDATE
+POST   /caronas/:caronaId/reservas     ⚠ RN-02 — transação + FOR UPDATE
 DELETE /reservas/:id                   cancelar → RN-06 libera vaga
 GET    /reservas/minhas                como passageiro
 ```
@@ -142,14 +142,16 @@ viacar-api/
 
 | Dia | Data | Entrega | Status |
 |---|---|---|---|
-| **D1** | 10/09 qui | Repo criado, `docker-compose up` sobe o Postgres, `schema.prisma` **completo**, 1ª migration rodando, `GET /health` no ar, estrutura de pastas vazia porém criada | ☐ |
-| **D2** | 11/09 sex | Auth (registrar/login/JWT) + middleware `autenticar` + CRUD de veículos com CHECK de capacidade. **Swagger publicado e mandado pro Willian.** | ☐ |
-| **D3** | 12/09 sáb | CRUD de rotas + `POST /caronas` com **RN-01 implementada e testada**. Primeiro teste automatizado. | ☐ |
-| **D4** | 13/09 dom | Reservas: criar (**RN-02 com transação**), cancelar (RN-06), cascata (RN-08). O coração do sistema fecha aqui. | ☐ |
+| **D1** | 10/09 qui | Repo criado, `docker-compose up` sobe o Postgres, `schema.prisma` **completo**, 1ª migration rodando, `GET /health` no ar, estrutura de pastas vazia porém criada | ☑ |
+| **D2** | 11/09 sex | Auth (registrar/login/JWT) + middleware `autenticar` + CRUD de veículos com CHECK de capacidade. **Swagger publicado e mandado pro Willian.** | ☑ |
+| **D3** | 12/09 sáb | CRUD de rotas + `POST /caronas` com **RN-01 implementada e testada**. Primeiro teste automatizado. | ☑ |
+| **D4** | 13/09 dom | Reservas: criar (**RN-02 com transação**), cancelar (RN-06), cascata (RN-08). O coração do sistema fecha aqui. | ☑ (feito em 16/09) |
 | **D5** | 14/09 seg | Busca com filtros (`GET /caronas?bairroOrigem=`), `seed.ts` com dados de demo, coleção Postman exportada. **Integração real com o front.** | ☐ |
 | **D6** | 15/09 ter | Testes das RNs, `README.md` passo a passo, `debitos-tecnicos.md`, DER exportado em imagem, apoio ao Kaua no roteiro de teste. | ☐ |
 | **D7** | 16/09 qua | **Congelamento de código.** Só correção de bug crítico. Ensaio do pitch com demo rodando do zero em máquina limpa. | ☐ |
 | — | 17/09 qui | Entrega / apresentação | ☐ |
+
+> **Como ficou na prática.** O D3 puxou para dentro dele a busca com filtros e o `seed.ts` que estavam no D5, e a suíte de testes que estava no D6 — as três coisas foram feitas junto com o código que elas verificam, não depois. O D4 escorregou de 13/09 para 16/09 por causa de duas rodadas de revisão entre o D3 e ele, que renderam quatro correções de borda (DT-17 a DT-20). Do D5 restam a **coleção Postman** — dispensável, o Swagger em `/docs` cobre o mesmo e está sempre em dia com o código — e a **integração real com o front**, que é o que sobra para o D7. A RN-10, que era opcional, entrou.
 
 ### Marcos que não podem escorregar
 
@@ -173,7 +175,7 @@ O `prisma/seed.ts` cria um cenário que demonstra o case inteiro em 1 comando:
 - 3 caronas abertas nos próximos dias, uma delas **já lotada** (pra demonstrar RN-02 ao vivo)
 - 4 reservas confirmadas + 1 cancelada (pra mostrar que a vaga voltou)
 
-Na demo o roteiro é: **abrir carona com 6 vagas num carro de 4 → erro 422 explícito** (RN-01, o item destacado do case) → corrigir pra 4 → passageiro reserva → tentar reservar de novo → 409 → outro passageiro pega a última vaga → carona vira `LOTADA` → sexto tenta e leva 422.
+Na demo o roteiro é: **abrir carona com 6 vagas num carro de 4 → erro 422 explícito** (RN-01, o item destacado do case) → corrigir pra 4 → passageiro reserva → tentar reservar de novo → 409 → outro passageiro pega a última vaga → carona vira `LOTADA` → sexto tenta e leva 409.
 
 ---
 

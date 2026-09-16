@@ -4,6 +4,28 @@ import { AppError } from '../errors/app-error';
 import { traduzirErroDoBanco } from '../errors/traduzir-erro-do-banco';
 
 /**
+ * Erros do `express.json()`, que roda antes de qualquer middleware nosso.
+ *
+ * Ele lanca um `SyntaxError` proprio, com um campo `type` que diz o que houve.
+ * Nao e AppError nem ZodError, entao sem este ramo um corpo torto vira 500
+ * "Erro inesperado" — resposta errada para o que e, na verdade, erro do cliente.
+ */
+const ERROS_DO_CORPO: Record<string, string> = {
+  'entity.parse.failed': 'O corpo da requisição não é um JSON válido.',
+  'entity.too.large': 'O corpo da requisição é grande demais.',
+  'encoding.unsupported': 'A codificação do corpo da requisição não é suportada.',
+};
+
+function mensagemDeCorpoInvalido(erro: unknown): string | undefined {
+  if (typeof erro !== 'object' || erro === null || !('type' in erro)) {
+    return undefined;
+  }
+
+  const tipo = (erro as { type: unknown }).type;
+  return typeof tipo === 'string' ? ERROS_DO_CORPO[tipo] : undefined;
+}
+
+/**
  * Tratador central de erros. Nenhum controller monta JSON de erro na mao -
  * o formato da resposta e definido aqui e em um lugar so.
  *
@@ -27,6 +49,12 @@ export const tratarErros: ErrorRequestHandler = (erro, _req, res, _next) => {
       mensagem: problema?.message ?? 'Dados inválidos.',
       campo: problema?.path.join('.'),
     });
+    return;
+  }
+
+  const corpoInvalido = mensagemDeCorpoInvalido(erro);
+  if (corpoInvalido) {
+    res.status(400).json({ erro: 'VALIDACAO', mensagem: corpoInvalido });
     return;
   }
 

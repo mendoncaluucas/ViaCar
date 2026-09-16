@@ -11,6 +11,22 @@ import { combinarDiaEHorario, textoParaHora } from '../src/shared/utils/horario'
 let contador = 0;
 const proximo = (): number => ++contador;
 
+const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/**
+ * Placa no formato Mercosul (LLLNLNN), sempre com 7 caracteres.
+ *
+ * Interpolar o contador direto na placa parecia funcionar e estourava o
+ * `VARCHAR(8)` assim que a suíte passava de 99 veículos — e a falha aparecia no
+ * arquivo de teste azarado da vez, não aqui. O contador é do módulo e não zera
+ * entre arquivos, então o tamanho precisa ser fixo.
+ */
+function placaDeTeste(n: number): string {
+  const digito = Math.floor(n / 2600) % 10;
+  const letra = LETRAS[n % 26];
+  return `TST${digito}${letra}${String(n % 100).padStart(2, '0')}`;
+}
+
 export async function criarUsuario(dados: Partial<Usuario> = {}): Promise<Usuario> {
   const n = proximo();
   return prisma.usuario.create({
@@ -33,7 +49,7 @@ export async function criarVeiculo(
   return prisma.veiculo.create({
     data: {
       usuarioId,
-      placa: `TST${String(n).padStart(1, '0')}A${String(n % 100).padStart(2, '0')}`,
+      placa: placaDeTeste(n),
       modelo: 'Honda Civic',
       cor: 'Prata',
       capacidadePassageiros: 4,

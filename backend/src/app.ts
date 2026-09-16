@@ -6,6 +6,7 @@ import { prisma } from './config/prisma';
 import { openapi } from './docs/openapi';
 import { authRoutes } from './modules/auth/auth.routes';
 import { caronaRoutes } from './modules/caronas/carona.routes';
+import { reservaRoutes, reservasDaCaronaRoutes } from './modules/reservas/reserva.routes';
 import { rotaRoutes } from './modules/rotas/rota.routes';
 import { usuarioRoutes } from './modules/usuarios/usuario.routes';
 import { veiculoRoutes } from './modules/veiculos/veiculo.routes';
@@ -42,10 +43,11 @@ app.use('/auth', authRoutes);
 app.use('/usuarios', usuarioRoutes);
 app.use('/veiculos', veiculoRoutes);
 app.use('/rotas', rotaRoutes);
+// Antes de '/caronas': a URL da reserva pendura na carona, mas o roteador e
+// do modulo de reservas.
+app.use('/caronas/:caronaId/reservas', reservasDaCaronaRoutes);
 app.use('/caronas', caronaRoutes);
-
-// Reservas entram no D4:
-// app.use('/reservas', reservaRoutes);
+app.use('/reservas', reservaRoutes);
 
 // Rota inexistente cai no mesmo envelope de erro do resto da API, em vez do
 // HTML padrao do Express - o frontend trata um formato so.

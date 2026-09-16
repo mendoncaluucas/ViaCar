@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { prisma } from '../../src/config/prisma';
 import * as caronaService from '../../src/modules/caronas/carona.service';
+import * as reservaService from '../../src/modules/reservas/reserva.service';
 import { AppError } from '../../src/shared/errors/app-error';
 import { criarCarona, criarRota, criarUsuario, criarVeiculo } from '../fabricas';
 
@@ -131,5 +132,86 @@ describe('carregadores aceitam cliente de transação', () => {
     ).rejects.toThrow();
 
     expect(await caronaService.contarReservasConfirmadas(carona.id)).toBe(0);
+  });
+});
+
+/**
+ * As duas escritas abaixo não são reservas, mas mexem na mesma linha e na mesma
+ * contagem: cancelar a carona e alterar `vagasOfertadas`. Enquanto elas não
+ * pegavam o lock, a RN-02 e a RN-08 tinham um furo cada uma — os dois
+ * reproduzidos contra o banco antes de virarem estes testes.
+ *
+ * A montagem é sempre a mesma: uma transação segura o lock da carona, a operação
+ * do motorista começa e fica bloqueada, e a reserva entra antes do commit.
+ */
+const esperar = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+async function comReservaEntrandoNoMeio(
+  caronaId: string,
+  passageiroId: string,
+  operacaoDoMotorista: () => Promise<unknown>,
+): Promise<void> {
+  let doMotorista: Promise<unknown> | undefined;
+
+  await prisma.$transaction(async (tx) => {
+    await caronaService.travarCaronaParaAtualizacao(tx, caronaId);
+
+    doMotorista = operacaoDoMotorista().catch(() => undefined);
+    await esperar(400);
+
+    await tx.reserva.create({ data: { caronaId, passageiroId } });
+  });
+
+  await doMotorista;
+}
+
+describe('a carona também é travada pelas operações do motorista', () => {
+  async function cenarioDoMotorista(vagas: number) {
+    const motorista = await criarUsuario();
+    const veiculo = await criarVeiculo(motorista.id, { capacidadePassageiros: 8 });
+    const rota = await criarRota(motorista.id);
+    const carona = await criarCarona(rota, veiculo.id, { vagasOfertadas: vagas });
+    const passageiro = await criarUsuario();
+    return { motorista, carona, passageiro };
+  }
+
+  /**
+   * RN-08. Sem o lock, o `updateMany` da cascata rodava antes da reserva existir
+   * e o `update` da carona só depois — o passageiro terminava CONFIRMADO numa
+   * carona CANCELADA e ninguém ia buscá-lo.
+   */
+  it('cancelar a carona leva junto a reserva que entrou durante o cancelamento', async () => {
+    const { motorista, carona, passageiro } = await cenarioDoMotorista(3);
+
+    await comReservaEntrandoNoMeio(carona.id, passageiro.id, () =>
+      caronaService.cancelar(carona.id, motorista.id),
+    );
+
+    const depois = await prisma.carona.findUniqueOrThrow({ where: { id: carona.id } });
+    const reserva = await prisma.reserva.findFirstOrThrow({ where: { caronaId: carona.id } });
+
+    expect(depois.status).toBe('CANCELADA');
+    expect(reserva.status).toBe('CANCELADA');
+    expect(await caronaService.contarReservasConfirmadas(carona.id)).toBe(0);
+  });
+
+  /**
+   * RN-02 pela porta do motorista. Sem o lock, `atualizar` aprovava a redução
+   * com a contagem antiga e a carona terminava com mais gente do que vagas.
+   */
+  it('reduzir as vagas não aprova com a contagem antiga', async () => {
+    const { motorista, carona, passageiro } = await cenarioDoMotorista(2);
+    const jaReservou = await criarUsuario();
+    await reservaService.criar(jaReservou.id, carona.id, {});
+
+    await comReservaEntrandoNoMeio(carona.id, passageiro.id, () =>
+      caronaService.atualizar(carona.id, motorista.id, { vagasOfertadas: 1 }),
+    );
+
+    const depois = await prisma.carona.findUniqueOrThrow({ where: { id: carona.id } });
+    const confirmadas = await caronaService.contarReservasConfirmadas(carona.id);
+
+    expect(confirmadas).toBe(2);
+    expect(depois.vagasOfertadas).toBeGreaterThanOrEqual(confirmadas);
   });
 });
