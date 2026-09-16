@@ -6,7 +6,7 @@ import type {
   Rota,
   Usuario,
   Veiculo,
-} from "./types";
+} from "./src/types";
 
 const API_URL = "http://localhost:3333";
 
@@ -283,8 +283,9 @@ export async function removerRota(id: string): Promise<void> {
 export async function criarCarona(data: {
   rotaId: string;
   veiculoId: string;
-  dataPartida: string;
+  data: string;
   vagasOfertadas: number;
+  observacao?: string;
 }): Promise<Carona> {
   return request<Carona>("/caronas", {
     method: "POST",
