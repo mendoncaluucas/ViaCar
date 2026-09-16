@@ -78,3 +78,28 @@ export function intervaloDoDia(dia: string): { inicio: Date; fim: Date } {
   const fim = new Date(inicio.getTime() + 24 * 60 * 60 * 1000);
   return { inicio, fim };
 }
+
+/**
+ * O dia-calendario de um instante, no fuso da empresa, como "AAAA-MM-DD".
+ *
+ * Fatiar o ISO direto daria o dia errado nas pontas: a carona da volta das
+ * 22:00 e 01:00Z do dia SEGUINTE, e cairia no dia errado em qualquer regra que
+ * pergunte "ja tem reserva neste dia?".
+ */
+export function diaLocalDe(instante: Date): string {
+  return new Date(instante.getTime() + MINUTOS_DO_FUSO * 60_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Data e hora no fuso da empresa, para aparecer em mensagem de erro.
+ *
+ * Mensagem de regra de negocio e lida por funcionario, nao por sistema: dizer
+ * "16/09/2026 07:30" resolve, dizer "2026-09-16T10:30:00.000Z" nao.
+ */
+export function formatarInstante(instante: Date): string {
+  return instante.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
+}

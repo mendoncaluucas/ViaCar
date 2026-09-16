@@ -1,7 +1,12 @@
 import { Prisma, StatusCarona, StatusReserva, type Rota, type Veiculo } from '@prisma/client';
 import { prisma, type ClientePrisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/app-error';
-import { combinarDiaEHorario, inicioDoDiaAtual, intervaloDoDia } from '../../shared/utils/horario';
+import {
+  combinarDiaEHorario,
+  formatarInstante,
+  inicioDoDiaAtual,
+  intervaloDoDia,
+} from '../../shared/utils/horario';
 import { carregarDoMotorista } from '../rotas/rota.service';
 import {
   INCLUDE_DETALHE,
@@ -109,19 +114,50 @@ export async function carregarCarona(
   return carona;
 }
 
+/** RN-09 — só o motorista dono da rota mexe na carona. */
+function exigirPosse(carona: CaronaComResumo, motoristaId: string): CaronaComResumo {
+  if (carona.rota.motoristaId !== motoristaId) {
+    throw new AppError('SEM_PERMISSAO', 'Esta carona é de outro motorista.');
+  }
+
+  return carona;
+}
+
+/**
+ * O status que a carona DEVE ter, dada a lotação.
+ *
+ * `vagasDisponiveis` é calculado a cada leitura, mas `status` não pode ser: a
+ * busca filtra por ele no `WHERE` do banco, e não dá para contar reservas ali.
+ * Sendo derivado e gravado ao mesmo tempo, ele precisa ser reavaliado por TODO
+ * mundo que mexe na lotação — e são três lugares, não dois: reservar, cancelar
+ * reserva e editar `vagasOfertadas`.
+ *
+ * Reavaliar nas duas direções é o ponto. Só a ida deixa a carona presa em
+ * `LOTADA` mesmo depois de abrir vaga, e ela nunca mais volta para a busca; só
+ * a volta deixa carona cheia aparecendo para quem procura.
+ *
+ * Status terminal não reabre: uma carona concluída ou cancelada não volta a
+ * ficar `ABERTA` porque alguém desmarcou.
+ */
+export function statusPelaLotacao(
+  statusAtual: StatusCarona,
+  vagasOfertadas: number,
+  confirmadas: number,
+): StatusCarona {
+  if (!STATUS_EDITAVEIS.includes(statusAtual)) {
+    return statusAtual;
+  }
+
+  return confirmadas >= vagasOfertadas ? StatusCarona.LOTADA : StatusCarona.ABERTA;
+}
+
 /** Carrega a carona exigindo que quem pede seja o motorista dono da rota (RN-09). */
 export async function carregarDoDono(
   caronaId: string,
   motoristaId: string,
   db: ClientePrisma = prisma,
 ): Promise<CaronaComResumo> {
-  const carona = await carregarCarona(caronaId, db);
-
-  if (carona.rota.motoristaId !== motoristaId) {
-    throw new AppError('SEM_PERMISSAO', 'Esta carona é de outro motorista.');
-  }
-
-  return carona;
+  return exigirPosse(await carregarCarona(caronaId, db), motoristaId);
 }
 
 /**
@@ -274,44 +310,62 @@ export async function buscarPorId(caronaId: string): Promise<CaronaDetalhada> {
   return paraDetalhada(carona);
 }
 
+/**
+ * Alterar vagas mexe na lotação, então vale as mesmas regras da reserva: roda
+ * em transação, com a carona travada.
+ *
+ * Sem a trava, `atualizar` lê a contagem de reservas num instante e grava no
+ * seguinte. Medido contra o banco: reduzir para 1 vaga enquanto uma segunda
+ * reserva estava em voo terminou com 2 confirmadas em 1 vaga ofertada — a RN-02
+ * furada pela porta do motorista, não pela do passageiro.
+ */
 export async function atualizar(
   caronaId: string,
   motoristaId: string,
   dados: AtualizarCaronaDTO,
 ): Promise<CaronaPublica> {
-  const carona = await carregarDoDono(caronaId, motoristaId);
+  return prisma.$transaction(async (tx) => {
+    const carona = exigirPosse(await travarCaronaParaAtualizacao(tx, caronaId), motoristaId);
 
-  if (!STATUS_EDITAVEIS.includes(carona.status)) {
-    throw new AppError(
-      'REGRA_NEGOCIO',
-      `Carona ${carona.status.toLowerCase().replace('_', ' ')} não pode mais ser alterada.`,
-    );
-  }
-
-  if (dados.vagasOfertadas !== undefined) {
-    validarCapacidade(carona.veiculo, dados.vagasOfertadas);
-
-    const confirmadas = carona._count.reservas;
-    if (dados.vagasOfertadas < confirmadas) {
+    if (!STATUS_EDITAVEIS.includes(carona.status)) {
       throw new AppError(
         'REGRA_NEGOCIO',
-        `Esta carona já tem ${confirmadas} reserva(s) confirmada(s). ` +
-          `Não é possível reduzir para ${dados.vagasOfertadas} vaga(s) sem cancelá-las antes.`,
-        'vagasOfertadas',
+        `Carona ${carona.status.toLowerCase().replace('_', ' ')} não pode mais ser alterada.`,
       );
     }
-  }
 
-  const atualizada = await prisma.carona.update({
-    where: { id: caronaId },
-    data: {
-      ...(dados.vagasOfertadas !== undefined && { vagasOfertadas: dados.vagasOfertadas }),
-      ...(dados.observacao !== undefined && { observacao: dados.observacao }),
-    },
-    include: INCLUDE_RESUMO,
+    const confirmadas = carona._count.reservas;
+
+    if (dados.vagasOfertadas !== undefined) {
+      validarCapacidade(carona.veiculo, dados.vagasOfertadas);
+
+      if (dados.vagasOfertadas < confirmadas) {
+        throw new AppError(
+          'REGRA_NEGOCIO',
+          `Esta carona já tem ${confirmadas} reserva(s) confirmada(s). ` +
+            `Não é possível reduzir para ${dados.vagasOfertadas} vaga(s) sem cancelá-las antes.`,
+          'vagasOfertadas',
+        );
+      }
+    }
+
+    // A lotação mudou, então o status precisa acompanhar nas duas direções:
+    // reduzir até encher fecha a carona, e abrir vaga numa carona lotada a
+    // devolve para a busca.
+    const vagasOfertadas = dados.vagasOfertadas ?? carona.vagasOfertadas;
+
+    const atualizada = await tx.carona.update({
+      where: { id: caronaId },
+      data: {
+        ...(dados.vagasOfertadas !== undefined && { vagasOfertadas: dados.vagasOfertadas }),
+        ...(dados.observacao !== undefined && { observacao: dados.observacao }),
+        status: statusPelaLotacao(carona.status, vagasOfertadas, confirmadas),
+      },
+      include: INCLUDE_RESUMO,
+    });
+
+    return paraPublica(atualizada);
   });
-
-  return paraPublica(atualizada);
 }
 
 /**
@@ -319,52 +373,49 @@ export async function atualizar(
  *
  * Em transação: deixar reserva confirmada apontando para carona cancelada faria
  * o passageiro acreditar que tem vaga numa viagem que não vai acontecer.
+ *
+ * E com a carona TRAVADA, não só em transação. Sem o lock, uma reserva que entra
+ * no meio do cancelamento não é vista pelo `updateMany` da cascata, mas o
+ * `update` da carona espera o lock dela e vence depois — reproduzido contra o
+ * banco, com o passageiro terminando `CONFIRMADA` numa carona `CANCELADA`.
  */
 export async function cancelar(caronaId: string, motoristaId: string): Promise<CaronaPublica> {
-  const carona = await carregarDoDono(caronaId, motoristaId);
+  return prisma.$transaction(async (tx) => {
+    const carona = exigirPosse(await travarCaronaParaAtualizacao(tx, caronaId), motoristaId);
 
-  if (carona.status === StatusCarona.CANCELADA) {
-    throw new AppError('CONFLITO', 'Esta carona já está cancelada.');
-  }
+    if (carona.status === StatusCarona.CANCELADA) {
+      throw new AppError('CONFLITO', 'Esta carona já está cancelada.');
+    }
 
-  if (carona.status === StatusCarona.CONCLUIDA) {
-    throw new AppError('REGRA_NEGOCIO', 'Uma carona já concluída não pode ser cancelada.');
-  }
+    if (carona.status === StatusCarona.CONCLUIDA) {
+      throw new AppError('REGRA_NEGOCIO', 'Uma carona já concluída não pode ser cancelada.');
+    }
 
-  // Cancelar uma viagem que já aconteceu não é só inócuo: o cancelamento em
-  // cascata marcaria as reservas como CANCELADA e apagaria o registro de quem
-  // de fato viajou — que é a base da pontuação (N2) e da avaliação (N3).
-  // Para esses casos o caminho é REALIZADA / NAO_COMPARECEU, não CANCELADA.
-  if (carona.dataPartida.getTime() <= Date.now()) {
-    throw new AppError(
-      'REGRA_NEGOCIO',
-      `Esta carona partiu em ${formatarParaUsuario(carona.dataPartida)} e não pode mais ser ` +
-        `cancelada. Uma viagem que já aconteceu precisa ter as reservas encerradas como ` +
-        `realizadas ou não comparecidas.`,
-    );
-  }
+    // Cancelar uma viagem que já aconteceu não é só inócuo: o cancelamento em
+    // cascata marcaria as reservas como CANCELADA e apagaria o registro de quem
+    // de fato viajou — que é a base da pontuação (N2) e da avaliação (N3).
+    // Para esses casos o caminho é REALIZADA / NAO_COMPARECEU, não CANCELADA.
+    if (carona.dataPartida.getTime() <= Date.now()) {
+      throw new AppError(
+        'REGRA_NEGOCIO',
+        `Esta carona partiu em ${formatarInstante(carona.dataPartida)} e não pode mais ser ` +
+          `cancelada. Uma viagem que já aconteceu precisa ter as reservas encerradas como ` +
+          `realizadas ou não comparecidas.`,
+      );
+    }
 
-  const [, atualizada] = await prisma.$transaction([
-    prisma.reserva.updateMany({
+    await tx.reserva.updateMany({
       where: { caronaId, status: StatusReserva.CONFIRMADA },
       data: { status: StatusReserva.CANCELADA, canceladoEm: new Date() },
-    }),
-    prisma.carona.update({
+    });
+
+    const atualizada = await tx.carona.update({
       where: { id: caronaId },
       data: { status: StatusCarona.CANCELADA },
       include: INCLUDE_RESUMO,
-    }),
-  ]);
+    });
 
-  return paraPublica(atualizada);
-}
-
-/** Data e hora no fuso da empresa, para aparecer em mensagem de erro. */
-function formatarParaUsuario(instante: Date): string {
-  return instante.toLocaleString('pt-BR', {
-    timeZone: 'America/Sao_Paulo',
-    dateStyle: 'short',
-    timeStyle: 'short',
+    return paraPublica(atualizada);
   });
 }
 

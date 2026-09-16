@@ -2,8 +2,8 @@
  * Especificacao OpenAPI servida em /docs. E a fonte da verdade do contrato:
  * se esta divergindo do codigo, o bug esta aqui.
  *
- * Caronas e reservas entram no D3/D4 - nao documentar antes de existir, para o
- * frontend nao construir tela em cima de endpoint que ainda nao responde.
+ * Documentar so o que ja responde: o frontend nao deve construir tela em cima
+ * de endpoint que ainda nao existe.
  */
 
 const erro = {
@@ -47,7 +47,8 @@ export const openapi = {
       'chega como `10:30Z`. Exiba com `toLocaleTimeString("pt-BR")` — cortar a string do ISO',
       'mostraria 10:30. Ja `rota.horarioPartida` e hora de parede pura, vem como `"07:30"`.',
       '',
-      '_Reservas entram no D4 e ainda nao aparecem aqui._',
+      '**Reservar vaga** e `POST /caronas/{caronaId}/reservas`. A vaga so e considerada ocupada',
+      'com a reserva `CONFIRMADA` — `vagasDisponiveis` ja desconta isso e nunca precisa ser calculado na tela.',
     ].join('\n'),
   },
   servers: [{ url: 'http://localhost:3333', description: 'Desenvolvimento local' }],
@@ -58,6 +59,7 @@ export const openapi = {
     { name: 'Veiculos', description: 'Carros do funcionario — a capacidade define o teto da RN-01' },
     { name: 'Rotas', description: 'O trajeto recorrente: origem, destino, horario e dias da semana' },
     { name: 'Caronas', description: 'A viagem de um dia — onde vive a RN-01 do case' },
+    { name: 'Reservas', description: 'A vaga do passageiro — onde vive a RN-02, sem overbooking' },
   ],
   components: {
     securitySchemes: {
@@ -237,6 +239,27 @@ export const openapi = {
             },
           },
         ],
+      },
+      Reserva: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          caronaId: { type: 'string', format: 'uuid' },
+          status: {
+            type: 'string',
+            enum: ['CONFIRMADA', 'CANCELADA', 'REALIZADA', 'NAO_COMPARECEU'],
+            description:
+              'REALIZADA e NAO_COMPARECEU existem para a pontuacao e a avaliacao de conduta (N2/N3). Na N1 so CONFIRMADA e CANCELADA aparecem.',
+          },
+          pontoEmbarque: { type: 'string', nullable: true, example: 'Portaria do condominio' },
+          criadoEm: { type: 'string', format: 'date-time' },
+          canceladoEm: { type: 'string', format: 'date-time', nullable: true },
+          carona: {
+            allOf: [{ $ref: '#/components/schemas/Carona' }],
+            description:
+              'Vem embutida para a tela de reservas nao precisar de uma requisicao por linha.',
+          },
+        },
       },
     },
   },
@@ -679,8 +702,11 @@ export const openapi = {
       get: {
         tags: ['Caronas'],
         summary: 'Busca caronas disponiveis',
-        description:
-          'A tela que ataca o problema do case. Devolve apenas caronas ABERTAS e futuras, e **exclui as do proprio usuario** — a busca existe para achar quem vai no mesmo caminho, e a RN-04 proibe reservar vaga na propria carona.',
+        description: [
+          'A tela que ataca o problema do case. Devolve apenas caronas **ABERTAS** e futuras, e **exclui as do proprio usuario** — a busca existe para achar quem vai no mesmo caminho, e a RN-04 proibe reservar vaga na propria carona.',
+          '',
+          '⚠️ `status = ABERTA` esconde tambem as **LOTADA**, nao so as canceladas. Uma carona some desta lista quando enche (RN-07) e volta quando alguem cancela (RN-06). Para acompanhar uma carona especifica depois de reservar, use `GET /caronas/{id}` ou `GET /reservas/minhas`, que nao filtram por status.',
+        ].join('\n'),
         parameters: [
           {
             name: 'bairroOrigem',
@@ -798,6 +824,104 @@ export const openapi = {
           404: respostaErro('Carona nao encontrada'),
           409: respostaErro('Carona ja cancelada'),
           422: respostaErro('Carona ja concluida'),
+        },
+      },
+    },
+    '/caronas/{caronaId}/reservas': {
+      parameters: [
+        { name: 'caronaId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      post: {
+        tags: ['Reservas'],
+        summary: 'Reserva uma vaga na carona',
+        description: [
+          'Quem reserva sai do token e qual carona sai da URL — o corpo so acrescenta onde apanhar o passageiro.',
+          '',
+          '**RN-02 (sem overbooking):** a carona e travada com `SELECT ... FOR UPDATE` antes de qualquer decisao,',
+          'dentro de uma transacao. Medido contra o banco: sem a trava, 4 pessoas disputando 1 vaga terminaram',
+          'com 4 reservas confirmadas; com a trava, exatamente 1.',
+          '',
+          '**RN-07:** ao ocupar a ultima vaga a carona vira `LOTADA` e some de `GET /caronas`.',
+          'A resposta ja traz o status novo — nao e preciso recarregar a carona depois de reservar.',
+        ].join('\n'),
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  pontoEmbarque: {
+                    type: 'string',
+                    minLength: 3,
+                    maxLength: 160,
+                    example: 'Portaria do condominio, Rua das Palmeiras 40',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Reserva confirmada, com a carona ja atualizada',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Reserva' } } },
+          },
+          400: respostaErro('Payload invalido'),
+          404: respostaErro('Carona nao encontrada'),
+          409: respostaErro(
+            'Sem vaga (RN-02), carona lotada, reserva repetida, ou ja existe reserva no mesmo dia e sentido (RN-10)',
+          ),
+          422: respostaErro(
+            'RN-04: e a propria carona do motorista. RN-05: carona cancelada, encerrada ou que ja partiu',
+          ),
+        },
+      },
+    },
+    '/reservas/minhas': {
+      get: {
+        tags: ['Reservas'],
+        summary: 'Lista as reservas do funcionario logado',
+        description:
+          'A contraparte de GET /caronas/minhas, que lista o que ele oferece como motorista. Traz o historico inteiro, inclusive canceladas, da partida mais distante para a mais antiga.',
+        responses: {
+          200: {
+            description: 'Reservas do passageiro',
+            content: {
+              'application/json': {
+                schema: { type: 'array', items: { $ref: '#/components/schemas/Reserva' } },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/reservas/{id}': {
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      delete: {
+        tags: ['Reservas'],
+        summary: 'Cancela a reserva e devolve a vaga',
+        description: [
+          '**RN-06:** a vaga volta a existir na mesma transacao, e a carona que estava `LOTADA` volta para `ABERTA`.',
+          '',
+          'Responde com a **carona atualizada**, nao com a reserva: quem cancelou ja sabe o que fez, e o que a tela',
+          'precisa saber e quantas vagas a carona tem agora.',
+          '',
+          'A remocao e logica — a linha continua no banco como `CANCELADA`. Carona que ja partiu nao pode ter a',
+          'reserva cancelada: apagaria o registro de quem de fato viajou, que e a base da pontuacao (N2) e da',
+          'avaliacao de conduta (N3).',
+        ].join('\n'),
+        responses: {
+          200: {
+            description: 'Carona com a vaga ja devolvida',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Carona' } } },
+          },
+          403: respostaErro('A reserva e de outro funcionario'),
+          404: respostaErro('Reserva nao encontrada'),
+          409: respostaErro('Reserva ja cancelada'),
+          422: respostaErro('A carona ja partiu, ou a reserva ja foi encerrada como realizada'),
         },
       },
     },
