@@ -4,7 +4,7 @@
 > **Responsável:** Henrique Cordeiro de Oliveira — Engenheiro de Requisitos
 > Revisão: 16/09/2026
 
-Este documento é a fonte de verdade sobre **o que** o sistema faz. O **como** está em [`modelagem-dados.md`](modelagem-dados.md) (DER e regras de negócio) e em [`plano-acao-backend.md`](plano-acao-backend.md) (contrato da API). Toda história aqui atende à DoR da Seção 3.1 do [Acordo de Equipe](acordo-equipe.md).
+Este documento é a fonte de verdade sobre **o que** o sistema faz. O **como** está em [`modelagem-dados.md`](modelagem-dados.md) (DER e regras de negócio) e em [`plano-acao-backend.md`](plano-acao-backend.md) (contrato da API). Toda história aqui atende à DoR da Seção 3.1 do Acordo de Equipe — documento do time, mantido fora do repositório.
 
 ---
 
@@ -139,10 +139,10 @@ Formato exigido pela DoR: **"Como [papel], eu quero [funcionalidade] para que [b
 
 **Critérios de aceitação**
 - O motorista escolhe uma rota sua, um veículo seu, a data de partida e o número de vagas.
-- **Se as vagas ofertadas excederem a capacidade do veículo, a carona não é criada.** O erro identifica o veículo, sua capacidade e o número pedido — por exemplo: *"Veículo Civic ABC1D23 comporta 4 passageiros; foram oferecidas 6 vagas."*
+- **Se as vagas ofertadas excederem a capacidade do veículo, a carona não é criada.** O erro identifica o veículo, sua capacidade e o número pedido: *"O Honda Civic de placa MHT4A21 comporta 4 passageiro(s), mas foram oferecidas 6 vagas."*
 - Vagas ofertadas precisam ser maiores que zero.
 - Usar veículo que pertence a outro funcionário é recusado.
-- Não é possível abrir duas caronas para a mesma rota na mesma data e horário.
+- Não é possível abrir duas caronas para a mesma rota no mesmo dia, independente do horário. Caronas canceladas não bloqueiam o dia.
 - A carona nasce com status `ABERTA`.
 
 **RF:** RF-08 · **RN:** RN-01 (crítica), RN-03
@@ -232,9 +232,11 @@ Formato exigido pela DoR: **"Como [papel], eu quero [funcionalidade] para que [b
 **Critérios de aceitação**
 - A alteração revalida a capacidade do veículo e é recusada se exceder.
 - Não é possível reduzir as vagas abaixo do número de reservas já confirmadas.
+- Reduzir as vagas até o número de reservas confirmadas fecha a carona (`LOTADA`) e ela sai da busca.
+- Aumentar as vagas de uma carona `LOTADA` a devolve para `ABERTA` e ela reaparece na busca.
 - Só o motorista dono da carona altera.
 
-**RF:** RF-16 · **RN:** RN-01, RN-09
+**RF:** RF-16 · **RN:** RN-01, RN-06, RN-07, RN-09
 
 ---
 
@@ -283,7 +285,7 @@ Formato exigido pela DoR: **"Como [papel], eu quero [funcionalidade] para que [b
 **Questões em aberto (para o próximo ciclo)**
 | # | Questão | Encaminhamento |
 |---|---|---|
-| Q-01 | Bairro em texto livre quebra a busca por variação de grafia | Registrado como DT-04 |
-| Q-02 | Quem marca a carona como concluída, já que não há job de mudança de status | Registrado como DT-05; impacta a pontuação do N2 |
-| Q-03 | Como tratar feriado e exceção de calendário na recorrência da rota | Registrado como DT-06 |
+| Q-01 | Bairro em texto livre quebra a busca por variação de grafia | Registrado como DT-06 |
+| Q-02 | Quem marca a carona como concluída, já que não há job de mudança de status | Registrado como DT-09; impacta a pontuação do N2 |
+| Q-03 | Como tratar feriado e exceção de calendário na recorrência da rota | Registrado como DT-07 |
 | Q-04 | Regra de pontuação do N2 ainda não definida (quanto vale uma viagem) | Levar ao PO no planejamento do N2 |
