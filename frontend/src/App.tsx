@@ -3114,8 +3114,14 @@ function MinhasRotas() {
                 </strong>
 
                 <span>
-                  {rota.diasSemana?.join(", ") ||
-                    "Dias não informados"}
+                  {rota.diasSemana?.length
+                  ? rota.diasSemana
+                        .map(
+                  (dia) =>
+                  ["", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"][dia]
+                  )
+                  .join(", ")
+                  : "Dias não informados"}
                 </span>
               </div>
 
