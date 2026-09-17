@@ -91,6 +91,16 @@ O Prisma faz a ponte com `@map` / `@@map` — o TypeScript vê `camelCase`, o ba
 
 Do acordo: função com responsabilidade única, teto de 30 linhas sem justificativa técnica. Se `criarCarona` passar disso, o que sobra é validação — extrai pra `validarCapacidadeDoVeiculo()`. Além de caber no acordo, isola a RN crítica num lugar testável.
 
+**As três exceções do projeto**, contando só linhas de código:
+
+| Função | Linhas | Justificativa |
+|---|---|---|
+| `carona.service.criar` | 40 | Sequência de guardas seguida da gravação. Quebrar em duas esconderia a ordem, que importa: posse e capacidade antes de tocar no banco |
+| `reserva.service.cancelar` | 38 | Corpo de `$transaction`. Tudo entre o `FOR UPDATE` e o commit precisa ficar visível junto — é o que sustenta a RN-02 e a RN-06 |
+| `tratarErros` | 39 | Cadeia única de despacho: `AppError` → Zod → corpo inválido → banco → 500. Separar em funções faria a ordem de precedência sumir do arquivo |
+
+Quem passar do teto acrescenta a linha aqui. Sem justificativa escrita, extrai.
+
 ### Regra de negócio mora no `service`
 
 - `controller`: lê `req`, chama o service, devolve `res`. Sem `if` de negócio.

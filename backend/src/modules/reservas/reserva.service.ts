@@ -62,7 +62,7 @@ function validarCaronaReservavel(carona: CaronaComResumo, passageiroId: string):
 }
 
 /**
- * O índice parcial `reserva_unica_confirmada` já impede a duplicata no banco.
+ * O índice parcial `reserva_confirmada_unica_por_carona` já impede a duplicata no banco.
  * Esta checagem existe para o erro chegar como 409 com texto legível, em vez de
  * uma violação de constraint traduzida genericamente.
  */
