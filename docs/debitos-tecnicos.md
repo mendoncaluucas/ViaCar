@@ -52,7 +52,7 @@ O Postgres não cria índice automático para chave estrangeira (diferente do My
 
 `npm test` retornava exit code 1 (*"No test files found"*), o que deixaria o CI vermelho no primeiro build, e nenhuma rede protegia refatoração.
 
-**Como foi resolvido:** suíte com **97 testes** rodando em ~9 s, contra um **banco de verdade** (`viacar_test`), não contra mocks. A decisão é deliberada: as regras mais críticas — a trigger da RN-01 e o índice parcial da RN-02 — **vivem dentro do banco**, e um mock provaria nada sobre elas.
+**Como foi resolvido:** suíte com **143 testes** rodando em ~14 s, contra um **banco de verdade** (`viacar_test`), não contra mocks. A decisão é deliberada: as regras mais críticas — a trigger da RN-01 e o índice parcial da RN-02 — **vivem dentro do banco**, e um mock não provaria nada sobre elas.
 
 | Arquivo | Cobre |
 |---|---|
@@ -63,8 +63,8 @@ O Postgres não cria índice automático para chave estrangeira (diferente do My
 | `tests/regras-negocio/rota.test.ts` | Conversão de horário, posse e remoção com carona agendada |
 | `tests/regras-negocio/carona.test.ts` | RN-01 no serviço, RN-03, RN-09, busca e cancelamento |
 | `tests/regras-negocio/auth.test.ts` | Cadastro, hash de senha, e a mensagem genérica de login |
-
-**Ainda falta:** os endpoints de reserva do D4. Escrever junto com o código, não depois.
+| `tests/regras-negocio/reserva.test.ts` | RN-02, RN-04 a RN-07 e RN-10, e a sincronia de status pelo `PATCH` |
+| `tests/shared/erros.test.ts` | Tradução de id malformado para 400, em vez de 500 |
 
 **Trava de segurança:** a suíte dá `TRUNCATE` nas tabelas antes de cada teste. Dois pontos do código recusam rodar se `DATABASE_URL` não contiver `_test` — apontar para o banco de desenvolvimento apagaria os dados do dia.
 

@@ -12,9 +12,9 @@
 
 | Camada | Stack |
 |---|---|
-| Backend | **Node.js 20 + TypeScript** (Express, Prisma, Zod) |
+| Backend | **Node.js 22 + TypeScript** (Express 5, Prisma, Zod) |
 | Banco | **PostgreSQL 16** via Docker |
-| Frontend | **React + TypeScript** (a definir com o Willian) |
+| Frontend | **React + TypeScript + Vite** |
 
 TypeScript em modo `strict`. `any` só com comentário justificando — senão vira código morto disfarçado.
 
