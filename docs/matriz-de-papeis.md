@@ -12,9 +12,9 @@ O papel atribuído não limitou o que cada um executou. As evidências de reposi
 
 | Papel | Integrante | Evidência no repositório |
 |---|---|---|
-| Product Owner | Vinicius Steuernagel | *a completar — atuação fora do repositório* |
+| Product Owner | Vinicius Steuernagel | Pitch de apresentação, 10 slides · atuação fora do repositório |
 | Engenheiro de Requisitos | Henrique Cordeiro de Oliveira | 1 commit · PR #7 · 2 documentos, 396 linhas |
-| Quality Assurance | Kaua Lucindo | *a completar — atuação fora do repositório* |
+| Quality Assurance | Kaua Lucindo | — |
 | Desenvolvedor Frontend | Willian Squena | 9 commits · 25 arquivos · PRs #6 e #8 |
 | Desenvolvedor Backend | Lucas Rogério Mendonça | 28 commits · 70 arquivos · PRs #1 a #5, #8 a #12 |
 | DevOps | Nicholas Scoz dos Santos | Proteção de branch · revisão do PR #1 |
@@ -25,16 +25,18 @@ O papel atribuído não limitou o que cada um executou. As evidências de reposi
 
 **Atividades realizadas**
 
-- Definição e validação do escopo do N1
-- Elaboração do pitch de apresentação (10 slides, PPTX)
+- Elaboração do pitch de apresentação: 10 slides cobrindo problema, solução, conceito de rota × carona, as duas regras críticas, stack, cronograma e débitos técnicos
 - Apresentação do pitch à banca
+- Definição e validação do escopo do N1
 
 **Evidências**
 
-- Arquivo do pitch: `ViaCar — Pitch Case 14.pptx`
-- *(completar: decisões de escopo registradas onde? reuniões? mensagens?)*
+| | |
+|---|---|
+| Pitch | `ViaCar — Pitch Case 14.pptx` — 10 slides, entregue junto com esta documentação |
+| Apresentação | Conforme item 8 do enunciado, o pitch é apresentado pelo Product Owner |
 
-> A atuação do PO aconteceu majoritariamente fora do repositório. Vale listar aqui as decisões de produto que ele bateu o martelo — o corte de escopo do N1, a priorização das regras — com data, mesmo que a evidência seja uma conversa.
+> A atuação do PO aconteceu fora do repositório, por isso não aparece no histórico do git. O pitch é o artefato produzido.
 
 ---
 
@@ -61,13 +63,15 @@ O papel atribuído não limitou o que cada um executou. As evidências de reposi
 
 **Atividades realizadas**
 
-- *a completar*
+—
 
 **Evidências**
 
-- *a completar*
+—
 
-> Os 143 testes automatizados foram escritos pelo backend, o que reduziu o escopo de QA no repositório. Se houve validação manual — roteiro de teste, conferência das regras pela interface, verificação do fluxo de demonstração —, é isso que entra aqui, com data.
+> Não foram registradas contribuições deste integrante durante o período da N1.
+>
+> A cobertura de qualidade do projeto foi feita pelo desenvolvedor backend: 143 testes automatizados de integração contra banco real, além de uma auditoria de fechamento que encontrou e corrigiu 6 defeitos depois do código já estar pronto e com a suíte verde.
 
 ---
 
