@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 
 import {
+  cancelarReserva,
   criarCarona,
   criarReserva,
   getMeuPerfil,
@@ -11,7 +12,13 @@ import {
   listarMinhasCaronas,
   listarMinhasReservas,
   listarRotas,
+  criarRota,
+  atualizarRota,
+  removerRota,
   listarVeiculos,
+  criarVeiculo,
+  atualizarVeiculo,
+  removerVeiculo,
   login,
   logoutUsuario,
   registrarUsuario,
@@ -713,7 +720,7 @@ function Dashboard({
 
           <button
             className="primary-button"
-            onClick={() => onNavigate("oferecer")}
+            onClick={() => onNavigate("buscar")}
           >
             Buscar carona
           </button>
@@ -761,7 +768,7 @@ function Dashboard({
 
         <button
           className="dashboard-stat"
-          onClick={() => onNavigate("minhas-caronas")}
+          onClick={() => onNavigate("oferecer")}
         >
           <div className="dashboard-stat-icon orange">
             ↑
@@ -1108,13 +1115,21 @@ function OferecerCarona({
     setEnviando(true);
 
     try {
-      await criarCarona({
-        rotaId,
-        veiculoId,
-        data,
-        vagasOfertadas,
-        observacao: observacao.trim() || undefined,
-      });
+      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(data)) {
+  setErro("Informe a data no formato DD/MM/AAAA.");
+  return;
+}
+
+const [dia, mes, ano] = data.split("/");
+const dataApi = `${ano}-${mes}-${dia}`;
+
+await criarCarona({
+  rotaId,
+  veiculoId,
+  data: dataApi,
+  vagasOfertadas,
+  observacao: observacao.trim() || undefined,
+});
 
       setSucesso("Carona publicada com sucesso!");
 
@@ -1275,18 +1290,36 @@ function OferecerCarona({
                 Data da carona
 
                 <input
-                  type="date"
-                  value={data}
-                  min={
-                    new Date()
-                      .toISOString()
-                      .split("T")[0]
-                  }
-                  onChange={(event) =>
-                    setData(event.target.value)
-                  }
-                  required
-                />
+  type="text"
+  value={data}
+  onChange={(event) => {
+    let valor = event.target.value.replace(/\D/g, "");
+
+    if (valor.length > 8) {
+      valor = valor.slice(0, 8);
+    }
+
+    if (valor.length >= 5) {
+      valor =
+        valor.slice(0, 2) +
+        "/" +
+        valor.slice(2, 4) +
+        "/" +
+        valor.slice(4);
+    } else if (valor.length >= 3) {
+      valor =
+        valor.slice(0, 2) +
+        "/" +
+        valor.slice(2);
+    }
+
+    setData(valor);
+  }}
+  placeholder="DD/MM/AAAA"
+  maxLength={10}
+  inputMode="numeric"
+  required
+/>
               </label>
 
               <label>
@@ -1490,11 +1523,21 @@ function BuscarCaronas() {
     setErro("");
 
     try {
-      const resultado = await listarCaronas({
-        bairroOrigem: bairro || undefined,
-        data: data || undefined,
-        sentido: sentido || undefined,
-      });
+        if (data && !/^\d{2}\/\d{2}\/\d{4}$/.test(data)) {
+  setErro("Informe a data no formato DD/MM/AAAA.");
+  setLoading(false);
+  return;
+}
+
+  const dataApi = data
+    ? `${data.slice(6, 10)}-${data.slice(3, 5)}-${data.slice(0, 2)}`
+    : undefined;
+
+  const resultado = await listarCaronas({
+    bairroOrigem: bairro || undefined,
+    data: dataApi,
+    sentido: sentido || undefined,
+});
 
       setCaronas(resultado);
     } catch (error) {
@@ -1537,12 +1580,35 @@ function BuscarCaronas() {
           Data
 
           <input
-            type="date"
-            value={data}
-            onChange={(event) =>
-              setData(event.target.value)
-            }
-          />
+  type="text"
+  value={data}
+  onChange={(event) => {
+    let valor = event.target.value.replace(/\D/g, "");
+
+    if (valor.length > 8) {
+      valor = valor.slice(0, 8);
+    }
+
+    if (valor.length >= 5) {
+      valor =
+        valor.slice(0, 2) +
+        "/" +
+        valor.slice(2, 4) +
+        "/" +
+        valor.slice(4);
+    } else if (valor.length >= 3) {
+      valor =
+        valor.slice(0, 2) +
+        "/" +
+        valor.slice(2);
+    }
+
+    setData(valor);
+  }}
+  placeholder="DD/MM/AAAA"
+  maxLength={10}
+  inputMode="numeric"
+/>
         </label>
 
         <label>
@@ -1944,6 +2010,10 @@ function MinhasReservas() {
     useState<Reserva[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const [cancelando, setCancelando] =
+  useState<string | null>(null);
+
+const [erro, setErro] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -1959,6 +2029,35 @@ function MinhasReservas() {
     load();
   }, []);
 
+async function handleCancelarReserva(
+  reservaId: string
+) {
+  setCancelando(reservaId);
+  setErro("");
+
+  try {
+    await cancelarReserva(reservaId);
+
+    setReservas((atual) =>
+      atual.map((reserva) =>
+        reserva.id === reservaId
+          ? {
+              ...reserva,
+              status: "CANCELADA",
+            }
+          : reserva
+      )
+    );
+  } catch (error) {
+    setErro(
+      error instanceof Error
+        ? error.message
+        : "Não foi possível cancelar a reserva."
+    );
+  } finally {
+    setCancelando(null);
+  }
+}
   return (
     <div>
       <PageTitle
@@ -1966,6 +2065,11 @@ function MinhasReservas() {
         title="Minhas reservas"
         description="Acompanhe suas reservas de carona."
       />
+      {erro && (
+  <div className="error-message">
+    {erro}
+  </div>
+)}
 
       {loading ? (
         <div className="loading">
@@ -1978,17 +2082,52 @@ function MinhasReservas() {
         />
       ) : (
         <div className="reservation-list">
-          {reservas.map((reserva) => (
+          {[...reservas]
+  .sort((a, b) => {
+    if (
+      a.status === "CANCELADA" &&
+      b.status !== "CANCELADA"
+    ) {
+      return 1;
+    }
+
+    if (
+      a.status !== "CANCELADA" &&
+      b.status === "CANCELADA"
+    ) {
+      return -1;
+    }
+
+    return 0;
+  })
+  .map((reserva) => (
             <div
               className="reservation-card"
               key={reserva.id}
-            >
+            > {reserva.status !== "CANCELADA" && (
+  <button
+    type="button"
+    className="secondary-button"
+    onClick={() =>
+      handleCancelarReserva(reserva.id)
+    }
+    disabled={cancelando === reserva.id}
+  >
+    {cancelando === reserva.id
+      ? "Cancelando..."
+      : "Cancelar reserva"}
+  </button>
+)}
               <div>
-                <span className="status-badge">
-                  {getStatusReservaLabel(
-                    reserva.status
-                  )}
-                </span>
+                <span
+  className={`status-badge ${
+    reserva.status === "CANCELADA"
+      ? "status-cancelada"
+      : ""
+  }`}
+>
+  {getStatusReservaLabel(reserva.status)}
+</span>
 
                 <h3>
                   {reserva.carona.rota.origemBairro}
@@ -2021,24 +2160,99 @@ function MinhasReservas() {
 // ==========================================
 
 function MeusVeiculos() {
-  const [veiculos, setVeiculos] =
-    useState<Veiculo[]>([]);
+  const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
 
   const [loading, setLoading] = useState(true);
 
+  const [mostrarFormulario, setMostrarFormulario] =
+    useState(false);
+
+  const [veiculoEditando, setVeiculoEditando] =
+    useState<Veiculo | null>(null);
+
+  const [erro, setErro] = useState("");
+
+  const [veiculoExcluindo, setVeiculoExcluindo] =
+  useState<Veiculo | null>(null);
+
+  async function carregarVeiculos() {
+    setLoading(true);
+    setErro("");
+
+    try {
+      const data = await listarVeiculos();
+
+      setVeiculos(data);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível carregar seus veículos."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    async function load() {
-      try {
-        setVeiculos(
-          await listarVeiculos()
-        );
-      } finally {
-        setLoading(false);
-      }
+    carregarVeiculos();
+  }, []);
+
+  function abrirCadastro() {
+    setVeiculoEditando(null);
+    setMostrarFormulario(true);
+    setErro("");
+  }
+
+  function abrirEdicao(veiculo: Veiculo) {
+    setVeiculoEditando(veiculo);
+    setMostrarFormulario(true);
+    setErro("");
+  }
+
+  function fecharFormulario() {
+    setMostrarFormulario(false);
+    setVeiculoEditando(null);
+  }
+
+  async function excluirVeiculo() {
+  if (!veiculoExcluindo) {
+    return;
+  }
+
+  try {
+    await removerVeiculo(veiculoExcluindo.id);
+
+    setVeiculoExcluindo(null);
+
+    await carregarVeiculos();
+  } catch (error) {
+    setErro(
+      error instanceof Error
+        ? error.message
+        : "Não foi possível excluir o veículo."
+    );
+  }
+}
+
+  async function salvarVeiculo(data: {
+    placa: string;
+    modelo: string;
+    cor: string;
+    capacidadePassageiros: number;
+  }) {
+    if (veiculoEditando) {
+      await atualizarVeiculo(
+        veiculoEditando.id,
+        data
+      );
+    } else {
+      await criarVeiculo(data);
     }
 
-    load();
-  }, []);
+    fecharFormulario();
+    await carregarVeiculos();
+  }
 
   return (
     <div>
@@ -2047,6 +2261,22 @@ function MeusVeiculos() {
         title="Meus veículos"
         description="Gerencie os veículos que você utiliza para oferecer caronas."
       />
+
+      {erro && (
+        <div className="error-message">
+          {erro}
+        </div>
+      )}
+
+      <div className="page-actions">
+      <button
+       className="add-vehicle-button"
+        onClick={abrirCadastro}
+      >
+         <span>+</span>
+       Cadastrar veículo
+      </button>
+      </div>
 
       {loading ? (
         <div className="loading">
@@ -2068,7 +2298,7 @@ function MeusVeiculos() {
                 🚙
               </div>
 
-              <div>
+              <div className="vehicle-card-content">
                 <span className="section-kicker">
                   VEÍCULO
                 </span>
@@ -2084,36 +2314,814 @@ function MeusVeiculos() {
                   {veiculo.capacidadePassageiros}{" "}
                   passageiros
                 </span>
+
+                <div className="vehicle-actions">
+                  <button
+                    className="secondary-button small"
+                    onClick={() =>
+                      abrirEdicao(veiculo)
+                    }
+                  >
+                    Editar
+                  </button>
+
+                  <button
+                    className="delete-vehicle-button"
+                    onClick={() =>
+                      setVeiculoExcluindo(veiculo)
+                    }
+                  >
+                    Excluir
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {mostrarFormulario && (
+        <VeiculoForm
+          veiculo={veiculoEditando}
+          onClose={fecharFormulario}
+          onSave={salvarVeiculo}
+        />
+      )}
+      {veiculoExcluindo && (
+  <div className="delete-modal-overlay">
+    <div className="delete-modal">
+      <div className="delete-modal-icon">
+        !
+      </div>
+
+      <div className="delete-modal-content">
+        <h2>Excluir veículo?</h2>
+
+        <p>
+          Tem certeza que deseja excluir o veículo{" "}
+          <strong>
+            {veiculoExcluindo.modelo}
+          </strong>
+          ?
+        </p>
+
+        <div className="delete-modal-actions">
+          <button
+            className="cancel-delete-button"
+            onClick={() =>
+              setVeiculoExcluindo(null)
+            }
+          >
+            Cancelar
+          </button>
+
+          <button
+            className="confirm-delete-button"
+            onClick={excluirVeiculo}
+          >
+            Excluir veículo
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
 
 // ==========================================
+// FORMULÁRIO DE VEÍCULO
+// ==========================================
+
+function VeiculoForm({
+  veiculo,
+  onClose,
+  onSave,
+}: {
+  veiculo: Veiculo | null;
+  onClose: () => void;
+  onSave: (data: {
+    placa: string;
+    modelo: string;
+    cor: string;
+    capacidadePassageiros: number;
+  }) => Promise<void>;
+}) {
+  const [placa, setPlaca] = useState(
+    veiculo?.placa || ""
+  );
+
+  const [modelo, setModelo] = useState(
+    veiculo?.modelo || ""
+  );
+
+  const [cor, setCor] = useState(
+    veiculo?.cor || ""
+  );
+
+  const [capacidadePassageiros, setCapacidadePassageiros] =
+    useState(
+      veiculo?.capacidadePassageiros || 1
+    );
+
+  const [loading, setLoading] = useState(false);
+
+  const [erro, setErro] = useState("");
+
+  async function salvar(
+    event: React.FormEvent
+  ) {
+    event.preventDefault();
+
+    setErro("");
+
+    if (!placa.trim()) {
+      setErro("Informe a placa do veículo.");
+      return;
+    }
+
+    if (!modelo.trim()) {
+      setErro("Informe o modelo do veículo.");
+      return;
+    }
+
+    if (!cor.trim()) {
+      setErro("Informe a cor do veículo.");
+      return;
+    }
+
+    if (
+      capacidadePassageiros < 1 ||
+      capacidadePassageiros > 8
+    ) {
+      setErro(
+        "A capacidade deve estar entre 1 e 8 passageiros."
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await onSave({
+        placa: placa.trim().toUpperCase(),
+        modelo: modelo.trim(),
+        cor: cor.trim(),
+        capacidadePassageiros,
+      });
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível salvar o veículo."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal vehicle-form-modal">
+
+        <button
+          type="button"
+          className="modal-close"
+          onClick={onClose}
+          disabled={loading}
+        >
+          ×
+        </button>
+
+        <span className="section-kicker">
+          {veiculo
+            ? "EDITAR VEÍCULO"
+            : "NOVO VEÍCULO"}
+        </span>
+
+        <h2>
+          {veiculo
+            ? "Editar veículo"
+            : "Cadastrar veículo"}
+        </h2>
+
+        <p>
+          Informe os dados do veículo que será
+          utilizado para oferecer caronas.
+        </p>
+
+        <form onSubmit={salvar}>
+
+          <label>
+            Modelo
+
+            <input
+              type="text"
+              value={modelo}
+              onChange={(event) =>
+                setModelo(event.target.value)
+              }
+              placeholder="Ex.: Toyota Corolla"
+              required
+            />
+          </label>
+
+          <label>
+            Placa
+
+            <input
+              type="text"
+              value={placa}
+              onChange={(event) =>
+                setPlaca(event.target.value)
+              }
+              placeholder="Ex.: ABC1D23"
+              maxLength={7}
+              required
+            />
+          </label>
+
+          <label>
+            Cor
+
+            <input
+              type="text"
+              value={cor}
+              onChange={(event) =>
+                setCor(event.target.value)
+              }
+              placeholder="Ex.: Prata"
+              required
+            />
+          </label>
+
+          <label>
+            Capacidade de passageiros
+
+            <input
+              type="number"
+              min={1}
+              max={8}
+              value={capacidadePassageiros}
+              onChange={(event) =>
+                setCapacidadePassageiros(
+                  Number(event.target.value)
+                )
+              }
+              required
+            />
+
+            <small className="form-help">
+              O sistema permite até 8 passageiros.
+            </small>
+          </label>
+
+          {erro && (
+            <div className="error-message">
+              {erro}
+            </div>
+          )}
+
+          <div className="modal-actions">
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onClose}
+              disabled={loading}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={loading}
+            >
+              {loading
+                ? "Salvando..."
+                : veiculo
+                  ? "Salvar alterações"
+                  : "Cadastrar veículo"}
+            </button>
+
+          </div>
+
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function RotaForm({
+  rota,
+  onClose,
+  onSave,
+}: {
+  rota: Rota | null;
+  onClose: () => void;
+  onSave: (data: {
+    apelido?: string;
+    origemBairro: string;
+    origemEndereco: string;
+    destinoBairro: string;
+    destinoEndereco: string;
+    horarioPartida: string;
+    sentido: "IDA" | "VOLTA";
+    diasSemana: number[];
+  }) => Promise<void>;
+}) {
+  const [apelido, setApelido] = useState(
+    rota?.apelido || ""
+  );
+
+  const [origemBairro, setOrigemBairro] =
+    useState(rota?.origemBairro || "");
+
+  const [origemEndereco, setOrigemEndereco] =
+    useState(rota?.origemEndereco || "");
+
+  const [destinoBairro, setDestinoBairro] =
+    useState(rota?.destinoBairro || "");
+
+  const [destinoEndereco, setDestinoEndereco] =
+    useState(rota?.destinoEndereco || "");
+
+  const [horarioPartida, setHorarioPartida] =
+    useState(rota?.horarioPartida || "");
+
+  const [sentido, setSentido] = useState<
+    "IDA" | "VOLTA"
+  >(rota?.sentido || "IDA");
+
+  const [diasSemana, setDiasSemana] = useState<
+    number[]
+  >(rota?.diasSemana || []);
+
+  const [salvando, setSalvando] = useState(false);
+
+  const [erro, setErro] = useState("");
+
+  const dias = [
+  { valor: 1, nome: "Seg" },
+  { valor: 2, nome: "Ter" },
+  { valor: 3, nome: "Qua" },
+  { valor: 4, nome: "Qui" },
+  { valor: 5, nome: "Sex" },
+  { valor: 6, nome: "Sáb" },
+  { valor: 7, nome: "Dom" },
+];
+
+  function alternarDia(dia: number) {
+    setDiasSemana((atual) =>
+      atual.includes(dia)
+        ? atual.filter((item) => item !== dia)
+        : [...atual, dia].sort(
+            (a, b) => a - b
+          )
+    );
+  }
+
+  async function handleSubmit(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    setErro("");
+
+    if (!origemBairro.trim()) {
+      setErro("Informe o bairro de origem.");
+      return;
+    }
+
+    if (!origemEndereco.trim()) {
+      setErro("Informe o endereço de origem.");
+      return;
+    }
+
+    if (!destinoBairro.trim()) {
+      setErro("Informe o bairro de destino.");
+      return;
+    }
+
+    if (!destinoEndereco.trim()) {
+      setErro("Informe o endereço de destino.");
+      return;
+    }
+
+    if (!horarioPartida) {
+  setErro("Informe o horário de partida.");
+  return;
+    }
+    const horarioValido =
+  /^([01]\d|2[0-3]):[0-5]\d$/.test(
+    horarioPartida
+    );
+  if (!horarioValido) {
+  setErro(
+    "Informe um horário válido no formato HH:mm. Exemplo: 07:30."
+  );
+  return;
+    }
+
+    if (diasSemana.length === 0) {
+      setErro(
+        "Selecione pelo menos um dia da semana."
+      );
+      return;
+    }
+
+    setSalvando(true);
+
+    try {
+      await onSave({
+        apelido: apelido.trim() || undefined,
+        origemBairro: origemBairro.trim(),
+        origemEndereco: origemEndereco.trim(),
+        destinoBairro: destinoBairro.trim(),
+        destinoEndereco: destinoEndereco.trim(),
+        horarioPartida,
+        sentido,
+        diasSemana,
+      });
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível salvar a rota."
+      );
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="form-modal-overlay">
+      <div className="form-modal route-form-modal">
+        <div className="form-modal-header">
+          <div>
+            <span className="section-kicker">
+              MOTORISTA
+            </span>
+
+            <h2>
+              {rota
+                ? "Editar rota"
+                : "Cadastrar rota"}
+            </h2>
+
+            <p>
+              Informe os dados do trajeto que você
+              costuma realizar.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="form-modal-close"
+            onClick={onClose}
+            disabled={salvando}
+          >
+            ×
+          </button>
+        </div>
+
+        {erro && (
+          <div className="error-message">
+            {erro}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="form-section">
+            <h3>Identificação</h3>
+
+            <div className="form-group">
+              <label htmlFor="rota-apelido">
+                Apelido da rota
+              </label>
+
+              <input
+                id="rota-apelido"
+                type="text"
+                value={apelido}
+                onChange={(event) =>
+                  setApelido(event.target.value)
+                }
+                placeholder="Ex.: Casa → Trabalho"
+              />
+
+              <span className="form-hint">
+                Opcional. Ajuda você a identificar
+                rapidamente a rota.
+              </span>
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h3>Origem</h3>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="rota-origem-bairro">
+                  Bairro
+                </label>
+
+                <input
+                  id="rota-origem-bairro"
+                  type="text"
+                  value={origemBairro}
+                  onChange={(event) =>
+                    setOrigemBairro(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Ex.: América"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="rota-origem-endereco">
+                  Endereço
+                </label>
+
+                <input
+                  id="rota-origem-endereco"
+                  type="text"
+                  value={origemEndereco}
+                  onChange={(event) =>
+                    setOrigemEndereco(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Ex.: Rua das Flores, 100"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h3>Destino</h3>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="rota-destino-bairro">
+                  Bairro
+                </label>
+
+                <input
+                  id="rota-destino-bairro"
+                  type="text"
+                  value={destinoBairro}
+                  onChange={(event) =>
+                    setDestinoBairro(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Ex.: Centro"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="rota-destino-endereco">
+                  Endereço
+                </label>
+
+                <input
+                  id="rota-destino-endereco"
+                  type="text"
+                  value={destinoEndereco}
+                  onChange={(event) =>
+                    setDestinoEndereco(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Ex.: Av. Brasil, 500"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="form-section">
+  <h3>Horário e frequência</h3>
+
+  <div className="form-row">
+    <div className="form-group">
+      <label htmlFor="rota-horario">
+        Horário de partida
+      </label>
+      <input
+        id="rota-horario"
+        type="text"
+        value={horarioPartida}
+        onChange={(event) => {
+          let valor = event.target.value.replace(/\D/g, "");
+
+          if (valor.length > 4) {
+            valor = valor.slice(0, 4);
+          }
+
+          if (valor.length >= 3) {
+            valor =
+              valor.slice(0, 2) +
+              ":" +
+              valor.slice(2);
+          }
+
+          setHorarioPartida(valor);
+        }}
+        placeholder="HH:mm"
+        maxLength={5}
+        inputMode="numeric"
+        required
+      />
+    </div>
+
+    <div className="form-group">
+      <label htmlFor="rota-sentido">
+        Sentido
+      </label>
+
+      <select
+        id="rota-sentido"
+        value={sentido}
+        onChange={(event) =>
+          setSentido(
+            event.target.value as "IDA" | "VOLTA"
+          )
+        }
+      >
+        <option value="IDA">Ida</option>
+        <option value="VOLTA">Volta</option>
+      </select>
+    </div>
+  </div>
+
+  <div className="form-group">
+    <label>
+      Dias da semana
+    </label>
+
+    <div className="days-selector">
+      {dias.map((dia) => (
+        <button
+          key={dia.valor}
+          type="button"
+          className={`day-button ${
+            diasSemana.includes(dia.valor)
+              ? "selected"
+              : ""
+          }`}
+          onClick={() =>
+            alternarDia(dia.valor)
+          }
+        >
+          {dia.nome}
+        </button>
+      ))}
+    </div>
+  </div>
+</div>
+
+<div className="form-modal-actions">
+  <button
+    type="button"
+    className="cancel-delete-button"
+    onClick={onClose}
+    disabled={salvando}
+  >
+    Cancelar
+  </button>
+
+  <button
+    type="submit"
+    className="primary-button"
+    disabled={salvando}
+  >
+    {salvando
+      ? "Salvando..."
+      : rota
+      ? "Salvar alterações"
+      : "Cadastrar rota"}
+  </button>
+</div>
+</form>
+      </div>
+    </div>
+  );
+}
+// ==========================================
 // ROTAS
 // ==========================================
 
 function MinhasRotas() {
-  const [rotas, setRotas] =
-    useState<Rota[]>([]);
+  const [rotas, setRotas] = useState<Rota[]>([]);
 
   const [loading, setLoading] = useState(true);
 
+  const [mostrarFormulario, setMostrarFormulario] =
+    useState(false);
+
+  const [rotaEditando, setRotaEditando] =
+    useState<Rota | null>(null);
+
+  const [rotaExcluindo, setRotaExcluindo] =
+    useState<Rota | null>(null);
+
+  const [erro, setErro] = useState("");
+
+  async function carregarRotas() {
+    setLoading(true);
+    setErro("");
+
+    try {
+      const data = await listarRotas();
+
+      setRotas(data);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível carregar suas rotas."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    async function load() {
-      try {
-        setRotas(await listarRotas());
-      } finally {
-        setLoading(false);
-      }
+    carregarRotas();
+  }, []);
+
+  function abrirCadastro() {
+    setRotaEditando(null);
+    setMostrarFormulario(true);
+    setErro("");
+  }
+
+  function abrirEdicao(rota: Rota) {
+    setRotaEditando(rota);
+    setMostrarFormulario(true);
+    setErro("");
+  }
+
+  function fecharFormulario() {
+    setMostrarFormulario(false);
+    setRotaEditando(null);
+  }
+
+  async function excluirRota() {
+    if (!rotaExcluindo) {
+      return;
     }
 
-    load();
-  }, []);
+    try {
+      await removerRota(rotaExcluindo.id);
+
+      setRotaExcluindo(null);
+
+      await carregarRotas();
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível excluir a rota."
+      );
+    }
+  }
+
+  async function salvarRota(data: {
+    apelido?: string;
+    origemBairro: string;
+    origemEndereco: string;
+    destinoBairro: string;
+    destinoEndereco: string;
+    horarioPartida: string;
+    sentido: "IDA" | "VOLTA";
+    diasSemana: number[];
+  }) {
+    try {
+      if (rotaEditando) {
+        await atualizarRota(
+          rotaEditando.id,
+          data
+        );
+      } else {
+        await criarRota(data);
+      }
+
+      fecharFormulario();
+
+      await carregarRotas();
+    } catch (error) {
+      throw error;
+    }
+  }
 
   return (
     <div>
@@ -2122,6 +3130,22 @@ function MinhasRotas() {
         title="Minhas rotas"
         description="Gerencie os trajetos que você costuma realizar."
       />
+
+      {erro && (
+        <div className="error-message">
+          {erro}
+        </div>
+      )}
+
+      <div className="page-actions">
+        <button
+          className="add-vehicle-button"
+          onClick={abrirCadastro}
+        >
+          <span>+</span>
+          Cadastrar rota
+        </button>
+      </div>
 
       {loading ? (
         <div className="loading">
@@ -2164,17 +3188,93 @@ function MinhasRotas() {
                 </strong>
 
                 <span>
-                  {rota.diasSemana?.join(", ") ||
-                    "Dias não informados"}
+                  {rota.diasSemana?.length
+                  ? rota.diasSemana
+                        .map(
+                  (dia) =>
+                  ["", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"][dia]
+                  )
+                .join(", ")
+                  : "Dias não informados"}
                 </span>
+              </div>
+
+              <div className="route-actions">
+                <button
+                  className="secondary-button small"
+                  onClick={() =>
+                    abrirEdicao(rota)
+                  }
+                >
+                  Editar
+                </button>
+
+                <button
+                  className="delete-vehicle-button"
+                  onClick={() =>
+                    setRotaExcluindo(rota)
+                  }
+                >
+                  Excluir
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {mostrarFormulario && (
+        <RotaForm
+          rota={rotaEditando}
+          onClose={fecharFormulario}
+          onSave={salvarRota}
+        />
+      )}
+
+      {rotaExcluindo && (
+        <div className="delete-modal-overlay">
+          <div className="delete-modal">
+            <div className="delete-modal-icon">
+              !
+            </div>
+
+            <div className="delete-modal-content">
+              <h2>Excluir rota?</h2>
+
+              <p>
+                Tem certeza que deseja excluir a rota{" "}
+                <strong>
+                  {rotaExcluindo.apelido ||
+                    `${rotaExcluindo.origemBairro} → ${rotaExcluindo.destinoBairro}`}
+                </strong>
+                ?
+              </p>
+
+              <div className="delete-modal-actions">
+                <button
+                  className="cancel-delete-button"
+                  onClick={() =>
+                    setRotaExcluindo(null)
+                  }
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  className="confirm-delete-button"
+                  onClick={excluirRota}
+                >
+                  Excluir rota
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ==========================================
 // PERFIL
