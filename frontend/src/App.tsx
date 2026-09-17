@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 
 import {
+  cancelarReserva,
   criarCarona,
   criarReserva,
   getMeuPerfil,
@@ -2009,6 +2010,10 @@ function MinhasReservas() {
     useState<Reserva[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const [cancelando, setCancelando] =
+  useState<string | null>(null);
+
+const [erro, setErro] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -2024,6 +2029,35 @@ function MinhasReservas() {
     load();
   }, []);
 
+async function handleCancelarReserva(
+  reservaId: string
+) {
+  setCancelando(reservaId);
+  setErro("");
+
+  try {
+    await cancelarReserva(reservaId);
+
+    setReservas((atual) =>
+      atual.map((reserva) =>
+        reserva.id === reservaId
+          ? {
+              ...reserva,
+              status: "CANCELADA",
+            }
+          : reserva
+      )
+    );
+  } catch (error) {
+    setErro(
+      error instanceof Error
+        ? error.message
+        : "Não foi possível cancelar a reserva."
+    );
+  } finally {
+    setCancelando(null);
+  }
+}
   return (
     <div>
       <PageTitle
@@ -2031,6 +2065,11 @@ function MinhasReservas() {
         title="Minhas reservas"
         description="Acompanhe suas reservas de carona."
       />
+      {erro && (
+  <div className="error-message">
+    {erro}
+  </div>
+)}
 
       {loading ? (
         <div className="loading">
@@ -2043,17 +2082,52 @@ function MinhasReservas() {
         />
       ) : (
         <div className="reservation-list">
-          {reservas.map((reserva) => (
+          {[...reservas]
+  .sort((a, b) => {
+    if (
+      a.status === "CANCELADA" &&
+      b.status !== "CANCELADA"
+    ) {
+      return 1;
+    }
+
+    if (
+      a.status !== "CANCELADA" &&
+      b.status === "CANCELADA"
+    ) {
+      return -1;
+    }
+
+    return 0;
+  })
+  .map((reserva) => (
             <div
               className="reservation-card"
               key={reserva.id}
-            >
+            > {reserva.status !== "CANCELADA" && (
+  <button
+    type="button"
+    className="secondary-button"
+    onClick={() =>
+      handleCancelarReserva(reserva.id)
+    }
+    disabled={cancelando === reserva.id}
+  >
+    {cancelando === reserva.id
+      ? "Cancelando..."
+      : "Cancelar reserva"}
+  </button>
+)}
               <div>
-                <span className="status-badge">
-                  {getStatusReservaLabel(
-                    reserva.status
-                  )}
-                </span>
+                <span
+  className={`status-badge ${
+    reserva.status === "CANCELADA"
+      ? "status-cancelada"
+      : ""
+  }`}
+>
+  {getStatusReservaLabel(reserva.status)}
+</span>
 
                 <h3>
                   {reserva.carona.rota.origemBairro}
@@ -3120,7 +3194,7 @@ function MinhasRotas() {
                   (dia) =>
                   ["", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"][dia]
                   )
-                  .join(", ")
+                .join(", ")
                   : "Dias não informados"}
                 </span>
               </div>

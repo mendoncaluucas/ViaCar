@@ -12,3 +12,8 @@ body,
 body {
   margin: 0;
 }
+.status-badge.status-cancelada {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fecaca;
+}

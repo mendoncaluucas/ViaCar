@@ -370,8 +370,8 @@ export async function listarMinhasReservas(): Promise<Reserva[]> {
   return request<Reserva[]>("/reservas/minhas");
 }
 
-export async function cancelarReserva(id: string): Promise<Carona> {
-  return request<Carona>(`/reservas/${id}`, {
+export async function cancelarReserva(id: string): Promise<Reserva> {
+  return request<Reserva>(`/reservas/${id}`, {
     method: "DELETE",
   });
 }
