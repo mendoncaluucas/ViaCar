@@ -57,6 +57,7 @@ PATCH  /usuarios/me
 
 POST   /veiculos                       RN: capacidade 1..8
 GET    /veiculos                       meus veículos
+GET    /veiculos/:id                   não filtra inativo, para carona antiga exibir o carro
 PATCH  /veiculos/:id
 DELETE /veiculos/:id                   inativa (soft delete)
 
