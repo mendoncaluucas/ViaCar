@@ -147,6 +147,41 @@ O papel atribuído não limitou o que cada um executou. As evidências de reposi
 
 ---
 
+## Como o trabalho foi acompanhado
+
+A equipe não usou Jira, Trello ou GitHub Projects. O acompanhamento foi feito **no próprio repositório**, em três camadas que cobrem planejamento, execução e registro.
+
+**1. Planejamento — cronograma com datas e responsáveis**
+
+O [`plano-acao-backend.md`](../docs/plano-acao-backend.md) define as sete entregas do período, com data prevista e caixa de conclusão (seção 4), e a tabela de dependências entre integrantes, com o que cada um deve a quem e até quando (seção 7).
+
+O cronograma registra também **o que escorregou**: o D4 estava previsto para 13/09 e saiu em 16/09, e o motivo está escrito ao lado — duas rodadas de revisão entre o D3 e ele, que renderam quatro correções de borda.
+
+**2. Execução — pull requests**
+
+Cada entrega virou um pull request com escopo fechado, descrição do que entra, como testar, regras de negócio afetadas e checklist do Definition of Done. Autor, revisor, arquivos alterados e data ficam no histórico.
+
+| PR | Entrega |
+|---|---|
+| [#1](https://github.com/mendoncaluucas/ViaCar/pull/1) | D1 — estrutura inicial do backend |
+| [#2](https://github.com/mendoncaluucas/ViaCar/pull/2) | D2 — autenticação, veículos e Swagger |
+| [#3](https://github.com/mendoncaluucas/ViaCar/pull/3) | D3 — rotas, caronas e busca |
+| [#4](https://github.com/mendoncaluucas/ViaCar/pull/4) | D4 — reservas com a RN-02 |
+| [#5](https://github.com/mendoncaluucas/ViaCar/pull/5) | Correção de setup em clone limpo |
+| [#6](https://github.com/mendoncaluucas/ViaCar/pull/6) | Interface web |
+| [#7](https://github.com/mendoncaluucas/ViaCar/pull/7) | Requisitos e handoff |
+| [#8](https://github.com/mendoncaluucas/ViaCar/pull/8) | Cadastro de veículos e rotas, cancelamento de reserva |
+| [#9](https://github.com/mendoncaluucas/ViaCar/pull/9) a [#11](https://github.com/mendoncaluucas/ViaCar/pull/11) | Sincronia entre documentação e código |
+| [#12](https://github.com/mendoncaluucas/ViaCar/pull/12) | Integração contínua *(aberto)* |
+
+**3. Registro do que ficou — débitos técnicos**
+
+O [`debitos-tecnicos.md`](../docs/debitos-tecnicos.md) foi atualizado ao longo da semana, não no fim: 12 débitos resolvidos com a explicação da correção, 11 abertos com caminho de pagamento, e uma seção de armadilhas verificadas contra o banco.
+
+> A escolha por não adotar ferramenta de board foi deliberada, pelo tamanho da equipe e do período. Para um ciclo maior, ou com mais gente tocando o mesmo módulo, um quadro com colunas e responsáveis passa a render mais do que a leitura do histórico de PRs.
+
+---
+
 ## Números do repositório
 
 | | |
