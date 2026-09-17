@@ -3,7 +3,7 @@
 > **Responsável:** Lucas Rogério Mendonça — Desenvolvedor Backend
 > **Equipe:** Draft · Case 14 — Gestão de Caronas Corporativas
 > **Janela:** 10/09/2026 (qui) → 17/09/2026 (qui) · 7 dias
-> **Stack:** Node.js 20 + TypeScript · Express · Prisma · PostgreSQL 16 (Docker) · JWT · Zod · Vitest · Swagger
+> **Stack:** Node.js 22 + TypeScript · Express 5 · Prisma · PostgreSQL 16 (Docker) · JWT · Zod · Vitest · Swagger
 
 ---
 
